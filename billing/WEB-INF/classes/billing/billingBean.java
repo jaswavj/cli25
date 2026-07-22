@@ -6701,13 +6701,44 @@ public Vector getBalanceSummaryReport(String fromDate, String toDate) throws Exc
 }
 
 public double getDayBookCashOpeningBalance(String fromDate) throws Exception {
+    String prevDate = getDayBefore(fromDate);
+    if (prevDate != null && hasCashBookActivityOnOrBefore(prevDate)) {
+        return getDayBookCashClosingBalanceForDate(prevDate);
+    }
     double manualBefore = getManualOpeningBalanceBefore(fromDate);
-    // When manual opening balance is used, it is the source of truth for cash in hand.
-    // Entries on fromDate appear as rows; only earlier manual entries belong in the header.
     if (hasManualOpeningBalanceUpTo(fromDate)) {
         return manualBefore;
     }
     return getTransactionCashOpeningBefore(fromDate) + manualBefore;
+}
+
+private String getDayBefore(String dateStr) throws Exception {
+    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    Calendar cal = Calendar.getInstance();
+    cal.setTime(sdf.parse(dateStr));
+    cal.add(Calendar.DAY_OF_MONTH, -1);
+    return sdf.format(cal.getTime());
+}
+
+private boolean hasCashBookActivityOnOrBefore(String date) throws Exception {
+    if (hasManualOpeningBalanceUpTo(date)) {
+        return true;
+    }
+    Vector rows = getDayBookCashBook(date, date);
+    return rows != null && !rows.isEmpty();
+}
+
+private double getDayBookCashClosingBalanceForDate(String date) throws Exception {
+    double opening = getDayBookCashOpeningBalance(date);
+    Vector rows = getDayBookCashBook(date, date);
+    double cashIn = 0;
+    double cashOut = 0;
+    for (int i = 0; i < rows.size(); i++) {
+        Vector row = (Vector) rows.get(i);
+        cashIn += (Double) row.get(4);
+        cashOut += (Double) row.get(5);
+    }
+    return opening + cashIn - cashOut;
 }
 
 private double getTransactionCashOpeningBefore(String fromDate) throws Exception {

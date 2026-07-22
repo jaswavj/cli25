@@ -726,6 +726,20 @@ nav.navbar-dark.custom-navbar.fixed-top {
     flex-shrink: 0;
 }
 
+.mobile-nav-user-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.mobile-nav-user-link:hover {
+    color: #c9a227;
+    text-decoration: none;
+}
+
 .mobile-nav-user i {
     color: #c9a227;
     font-size: 1rem;
@@ -879,6 +893,13 @@ body:not(.login-body) {
     flex: 1;
     min-width: 0;
     transition: all 0.3s ease;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.user-info:hover {
+    color: #c9a227;
+    text-decoration: none;
 }
 
 .user-info i {

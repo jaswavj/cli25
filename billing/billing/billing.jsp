@@ -429,14 +429,8 @@ int userDiscPer = (uid != null) ? userBn.getUserDiscPer(uid) : 100;
                 <span class="fg-lbl">Phone No</span>
                 <input type="text" id="customerPhn" class="fg-inp" placeholder="Phone number" autocomplete="off">
             </div>
-            <label class="tog">
-                <input class="form-check-input" type="checkbox" id="isTaxBill" checked>
-                <span class="tog-lbl"><i class="fa-solid fa-receipt"></i> Tax Bill</span>
-            </label>
-            <label class="tog">
-                <input class="form-check-input" type="checkbox" id="isCommission">
-                <span class="tog-lbl"><i class="fa-solid fa-percent"></i> Commission</span>
-            </label>
+            <input type="hidden" id="isTaxBill" value="1">
+            <input type="hidden" id="isCommission" value="0">
             <button class="bb bb-outline" data-bs-toggle="modal" data-bs-target="#quotationListModal">
                 <i class="fa-solid fa-clock"></i> HOLD LIST
             </button>
@@ -504,9 +498,8 @@ int userDiscPer = (uid != null) ? userBn.getUserDiscPer(uid) : 100;
                     <th style="width:8%;">Qty</th>
                     <th style="width:10%;">Price</th>
                     <th style="width:10%;">Discount</th>
-                    <th style="width:10%;">Commission</th>
-                    <th style="width:10%;">Total</th>
-                    <th style="width:14%;">Action</th>
+                    <th style="width:12%;">Total</th>
+                    <th style="width:15%;">Action</th>
                 </tr>
             </thead>
             <tbody id="billBody">
@@ -529,10 +522,6 @@ int userDiscPer = (uid != null) ? userBn.getUserDiscPer(uid) : 100;
                 <div class="fg">
                     <span class="fg-lbl">Discount</span>
                     <input type="text" class="fg-inp amt only-numbers" id="discountTotal" value="0" readonly>
-                </div>
-                <div class="fg">
-                    <span class="fg-lbl">Commission</span>
-                    <input type="text" class="fg-inp amt only-numbers" id="commissionTotal" value="0" readonly>
                 </div>
                 <div class="fg">
                     <span class="fg-lbl">Grand Total</span>

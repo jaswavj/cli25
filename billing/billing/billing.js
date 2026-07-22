@@ -9,6 +9,14 @@ let currentProductStock = 0; // Store current product's available stock
 let productQuantitiesInBill = {}; // Track quantities already added to bill by product ID
 let currentQuotationId = null; // Store current quotation ID when converting to bill
 
+function getIsTaxBill() {
+    return 1;
+}
+
+function isCommissionEnabled() {
+    return false;
+}
+
 function buildDiscountCellHtml(rowId, value, discType) {
     const val = (parseFloat(value) || 0).toFixed(2);
     const type = discType === 2 ? 2 : 1;
@@ -69,8 +77,6 @@ customerNameInput.addEventListener("input", function() {
     if (query.length < 2) {
         customerIdInput.value = "0";
         enableSaveButton(); // Re-enable when customer is cleared
-        const ct = document.getElementById('isCommission');
-        if (ct) ct.checked = false;
         refreshCommissionDisplay();
         return;
     }
@@ -123,8 +129,6 @@ function selectCustomer(customer) {
     customerPhnInput.value = customer.phone !== '-' ? customer.phone : '';
     customerIdInput.value = customer.id;
     document.getElementById('customerCreditLimit').value = customer.creditLimit || 0;
-    const commissionToggle = document.getElementById('isCommission');
-    if (commissionToggle) commissionToggle.checked = (customer.isEligibleForCommission == 1);
     refreshCommissionDisplay();
 
     removeCustomerAutocomplete();
@@ -406,7 +410,7 @@ function addProduct() {
     const productSubtotal = actualQty * price;
     
     const productDiscount = discount * actualQty;
-    const commissionAmount = (document.getElementById('isCommission') && document.getElementById('isCommission').checked)
+    const commissionAmount = isCommissionEnabled()
         ? (productCommission * actualQty)
         : 0;
     const total = productSubtotal - productDiscount - commissionAmount;
@@ -426,8 +430,7 @@ function addProduct() {
             <td style="width: 8%;">${displayQty} ${displayUnit}</td>
             <td style="width: 10%;">₹${price.toFixed(3)}</td>
             <td style="width: 10%;">${buildDiscountCellHtml(count, 0, 1)}</td>
-            <td style="width: 10%;">₹${commissionAmount.toFixed(3)}</td>
-            <td style="width: 10%;" class="row-total">₹${total.toFixed(3)}</td>
+            <td style="width: 12%;" class="row-total">₹${total.toFixed(3)}</td>
             <td style="width: 15%;">
                 <button class="btn btn-danger btn-sm" 
                     onclick="event.stopPropagation(); removeProduct(${count})">
@@ -581,7 +584,7 @@ document.getElementById("productQty").addEventListener("input", function() {
 function getCommissionAmountForRow(row) {
     const qty = parseFloat(row.dataset.quantity) || parseFloat(row.querySelector('td:nth-child(4)').textContent) || 0;
     const perUnitCommission = parseFloat(row.dataset.commission || 0);
-    const isEligibleForCommission = document.getElementById('isCommission') ? document.getElementById('isCommission').checked : false;
+    const isEligibleForCommission = isCommissionEnabled();
     return isEligibleForCommission ? (qty * perUnitCommission) : 0;
 }
 
@@ -592,22 +595,16 @@ function refreshCommissionDisplay() {
     rows.forEach(row => {
         const commissionAmount = getCommissionAmountForRow(row);
         row.dataset.commissionAmount = commissionAmount;
-        const commissionCell = row.querySelector('td:nth-child(7)');
-        if (commissionCell) {
-            commissionCell.textContent = '₹' + commissionAmount.toFixed(3);
-        }
         totalCommission += commissionAmount;
 
-        // Recalculate row total with updated commission
         const rowSubtotal = parseFloat(row.dataset.subtotal || 0);
         const rowDiscount = parseFloat(row.dataset.discount || 0);
         const newRowTotal = rowSubtotal - rowDiscount - commissionAmount;
         row.dataset.total = newRowTotal;
         grandTotal += newRowTotal;
 
-        // Update row total cell
         const tds = row.querySelectorAll('td');
-        if (tds[7]) tds[7].textContent = '₹' + newRowTotal.toFixed(3);
+        if (tds[6]) tds[6].textContent = '₹' + newRowTotal.toFixed(3);
     });
 
     updateTotals();
@@ -672,9 +669,9 @@ function updateRowDiscount(rowId) {
     row.dataset.discount = newDisc;
     row.dataset.total = newTotal;
 
-    // Update total cell (index 7)
+    // Update total cell (index 6)
     const tds = row.querySelectorAll('td');
-    tds[7].textContent = '\u20b9' + newTotal.toFixed(3);
+    tds[6].textContent = '\u20b9' + newTotal.toFixed(3);
 
     updateTotals();
     updatePayableAmount();
@@ -682,7 +679,6 @@ function updateRowDiscount(rowId) {
 function updateTotals() {
     document.getElementById("priceTotal").value = subtotal.toFixed(3);
     document.getElementById("discountTotal").value = totalDiscount.toFixed(3);
-    document.getElementById("commissionTotal").value = totalCommission.toFixed(3);
     document.getElementById("grandTotal").value = grandTotal.toFixed(3);
 }
 
@@ -798,11 +794,6 @@ document.getElementById("mode").addEventListener("change", function () {
     updatePaymentFields(payable);
 });
 
-const commissionCheckbox = document.getElementById('isCommission');
-if (commissionCheckbox) {
-    commissionCheckbox.addEventListener('change', refreshCommissionDisplay);
-}
-
 function saveBill() {
     
 
@@ -815,7 +806,7 @@ function saveBill() {
     let attenderId = document.getElementById("attenderId") ? document.getElementById("attenderId").value : "";
     
     // Get tax bill checkbox value
-    let isTaxBill = document.getElementById("isTaxBill").checked ? 1 : 0;
+    let isTaxBill = getIsTaxBill();
     
     // Get selected price category (default to retailer since we removed the buttons)
     const priceCategory = 3;
@@ -868,7 +859,7 @@ function saveBill() {
 
     // Collect products
     const rows = document.querySelectorAll("#billBody tr");
-    const isEligibleForCommission = document.getElementById('isCommission') ? document.getElementById('isCommission').checked : false;
+    const isEligibleForCommission = isCommissionEnabled();
     let products = [];
 
     rows.forEach(row => {
@@ -877,7 +868,7 @@ function saveBill() {
         const qty = parseFloat(cols[3].innerText) || 0;
         const price = parseFloat(cols[4].innerText.replace("₹","")) || 0;
         const discount = getRowCalculatedDiscount(row);
-        const total = parseFloat(cols[7].innerText.replace("₹","")) || 0;
+        const total = parseFloat(cols[6].innerText.replace("₹","")) || 0;
         const batchId = parseInt(row.dataset.batchId || 0);
         const commission = isEligibleForCommission ? parseFloat(row.dataset.commission || 0) : 0;
 
@@ -1933,8 +1924,7 @@ function addOrderItemToBill(item) {
             <td style="width: 8%;">${item.qty}</td>
             <td style="width: 10%;">₹${item.price.toFixed(3)}</td>
             <td style="width: 10%;">${buildDiscountCellHtml(count, 0, 1)}</td>
-            <td style="width: 10%;">₹0.000</td>
-            <td style="width: 10%;" class="row-total">₹${item.total.toFixed(3)}</td>
+            <td style="width: 12%;" class="row-total">₹${item.total.toFixed(3)}</td>
             <td style="width: 15%;">
                 <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); removeProduct(${count})">
                     <i class="fas fa-trash"></i>
@@ -2007,9 +1997,6 @@ function newBill() {
     document.getElementById('customerId').value = '0';
     document.getElementById('customerCreditLimit').value = '0';
     
-    // Reset tax bill checkbox to ON (default)
-    document.getElementById('isTaxBill').checked = true;
-    
     // Reset product fields
     document.getElementById('productCode').value = '';
     document.getElementById('productName').value = '';
@@ -2023,7 +2010,6 @@ function newBill() {
     // Reset payment fields
     document.getElementById('priceTotal').value = '0';
     document.getElementById('discountTotal').value = '0';
-    document.getElementById('commissionTotal').value = '0';
     document.getElementById('grandTotal').value = '0';
     document.getElementById('finalDiscount').value = '0';
     document.getElementById('payableAmount').value = '0';
@@ -2101,7 +2087,7 @@ function saveQuotation() {
         const priceText = row.querySelector('td:nth-child(5)').textContent.replace('₹', '').trim();
         const price = parseFloat(priceText);
         const discount = getRowCalculatedDiscount(row);
-        const totalText = row.querySelector('td:nth-child(8)').textContent.replace('₹', '').trim();
+        const totalText = row.querySelector('td:nth-child(7)').textContent.replace('₹', '').trim();
         const total = parseFloat(totalText);
         
         products.push({
@@ -2256,7 +2242,7 @@ function addProductToBillTable(product) {
     const productDiscount = parseFloat(product.discount);
     const productTotal = parseFloat(product.total);
     const productCommissionPerUnit = parseFloat(product.commission || 0);
-    const productCommissionAmount = (document.getElementById('isCommission') && document.getElementById('isCommission').checked)
+    const productCommissionAmount = isCommissionEnabled()
         ? (productCommissionPerUnit * parseFloat(product.qty))
         : 0;
     
@@ -2269,8 +2255,7 @@ function addProductToBillTable(product) {
             <td style="width: 8%;">${product.qty}</td>
             <td style="width: 10%;">₹${parseFloat(product.price).toFixed(3)}</td>
             <td style="width: 10%;">${buildDiscountCellHtml(count, productDiscount, 1)}</td>
-            <td style="width: 10%;">₹${productCommissionAmount.toFixed(3)}</td>
-            <td style="width: 10%;" class="row-total">₹${productTotal.toFixed(3)}</td>
+            <td style="width: 12%;" class="row-total">₹${productTotal.toFixed(3)}</td>
             <td style="width: 15%;">
                 <button class="btn btn-danger btn-sm" 
                     onclick="event.stopPropagation(); removeProduct(${count})">
