@@ -13,11 +13,12 @@ if (fromDate == null || fromDate.isEmpty() || toDate == null || toDate.isEmpty()
 }
 
 double cashOpening = billing.getDayBookCashOpeningBalance(fromDate);
+double bankOpening = billing.getDayBookBankOpeningBalance(fromDate);
 Vector cashBookRows = billing.getDayBookCashBook(fromDate, toDate);
 Vector dayBookRows  = billing.getDayBookDetail(fromDate, toDate);
 Vector salesRows    = billing.getDayBookSalesDetails(fromDate, toDate);
 
-String[] descOrder = {"Opening Balance", "Sales", "Balance Collection", "Purchase", "Supplier Payment", "Expense"};
+String[] descOrder = {"Opening Balance", "Bank Opening Balance", "Sales", "Balance Collection", "Purchase", "Supplier Payment", "Expense"};
 
 LinkedHashMap<String, double[]> cashByDesc = new LinkedHashMap<>();
 for (int o = 0; o < descOrder.length; o++) cashByDesc.put(descOrder[o], new double[]{0, 0});
@@ -87,6 +88,7 @@ for (Iterator dit = dayByDesc.entrySet().iterator(); dit.hasNext();) {
         .cat-Supplier-Payment   { background:#f3e8ff; color:#6b21a8; }
         .cat-Expense            { background:#fef9c3; color:#854d0e; }
         .cat-Opening-Balance    { background:#e0f2fe; color:#0369a1; }
+        .cat-Bank-Opening-Balance { background:#dbeafe; color:#1e40af; }
         .amt-in  { color:#166534; font-weight:600; }
         .amt-out { color:#991b1b; font-weight:600; }
         .bal-pos { color:#166534; font-weight:700; }
@@ -211,17 +213,17 @@ for (Iterator git = cashGroups.entrySet().iterator(); git.hasNext();) {
             </thead>
             <tbody>
 <%
-double dayBookOpening = cashOpening;
+double dayBookBankOpening = bankOpening;
 double sumCash = 0, sumCredit = 0, sumBank = 0, sumTotal = 0;
 sno = 0;
 %>
                 <tr class="opening-row">
                     <td></td>
-                    <td><strong>Opening Balance (B/F)</strong></td>
-                    <td class="text-end <%=dayBookOpening >= 0 ? "bal-pos" : "bal-neg"%>"><%=String.format("%.2f", dayBookOpening)%></td>
+                    <td><strong>Bank Opening Balance (B/F)</strong></td>
                     <td class="text-end"></td>
                     <td class="text-end"></td>
-                    <td class="text-end <%=dayBookOpening >= 0 ? "bal-pos" : "bal-neg"%>"><%=String.format("%.2f", dayBookOpening)%></td>
+                    <td class="text-end <%=dayBookBankOpening >= 0 ? "bal-pos" : "bal-neg"%>"><%=String.format("%.2f", dayBookBankOpening)%></td>
+                    <td class="text-end <%=dayBookBankOpening >= 0 ? "bal-pos" : "bal-neg"%>"><%=String.format("%.2f", dayBookBankOpening)%></td>
                 </tr>
 <%
 for (Iterator dgit = dayGroups.entrySet().iterator(); dgit.hasNext();) {
@@ -380,17 +382,26 @@ function downloadPdf() {
     html2pdf().set(opt).from(element).save();
 }
 
+function updateObNotesPlaceholder() {
+    const type = document.getElementById('obType').value;
+    document.getElementById('obNotes').placeholder = type === 'bank'
+        ? 'Bank opening balance'
+        : 'Opening cash in hand';
+}
+
 function loadOpeningBalanceList() {
     fetch('<%=contextPath%>/reports/dayBook/getOpeningBalanceList.jsp')
         .then(r => r.json())
         .then(data => {
             const tbody = document.getElementById('obListBody');
             if (!data.length) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No opening balance entries yet.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No opening balance entries yet.</td></tr>';
                 return;
             }
             tbody.innerHTML = data.map(row =>
                 '<tr><td>' + row.balanceDate + '</td>' +
+                '<td><span class="badge bg-' + (row.balanceType === 'bank' ? 'primary' : 'success') + '">' +
+                (row.balanceType === 'bank' ? 'Bank' : 'Cash') + '</span></td>' +
                 '<td class="text-end fw-bold">' + parseFloat(row.amount).toFixed(2) + '</td>' +
                 '<td>' + (row.notes || '-') + '</td>' +
                 '<td>' + (row.userName || '-') + '</td></tr>'
@@ -398,12 +409,13 @@ function loadOpeningBalanceList() {
         })
         .catch(() => {
             document.getElementById('obListBody').innerHTML =
-                '<tr><td colspan="4" class="text-center text-danger">Could not load list.</td></tr>';
+                '<tr><td colspan="5" class="text-center text-danger">Could not load list.</td></tr>';
         });
 }
 
 function saveOpeningBalance() {
     const balanceDate = document.getElementById('obDate').value;
+    const balanceType = document.getElementById('obType').value;
     const amount = document.getElementById('obAmount').value;
     const notes = document.getElementById('obNotes').value;
     if (!balanceDate || !amount) {
@@ -413,7 +425,7 @@ function saveOpeningBalance() {
     fetch('<%=contextPath%>/reports/dayBook/saveOpeningBalance.jsp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ balanceDate, amount, notes }).toString()
+        body: new URLSearchParams({ balanceDate, balanceType, amount, notes }).toString()
     })
     .then(r => r.json())
     .then(res => {
@@ -428,7 +440,11 @@ function saveOpeningBalance() {
     });
 }
 
-document.getElementById('openingBalanceModal').addEventListener('show.bs.modal', loadOpeningBalanceList);
+document.getElementById('obType').addEventListener('change', updateObNotesPlaceholder);
+document.getElementById('openingBalanceModal').addEventListener('show.bs.modal', function() {
+    updateObNotesPlaceholder();
+    loadOpeningBalanceList();
+});
 </script>
 
 <!-- Opening Balance Modal -->
@@ -441,17 +457,24 @@ document.getElementById('openingBalanceModal').addEventListener('show.bs.modal',
             </div>
             <div class="modal-body">
                 <div class="row g-3 mb-3">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label fw-bold">Date</label>
                         <input type="date" id="obDate" class="form-control" value="<%=fromDate%>">
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Type</label>
+                        <select id="obType" class="form-select">
+                            <option value="cash">Cash</option>
+                            <option value="bank">Bank</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label fw-bold">Amount</label>
                         <input type="number" id="obAmount" class="form-control" step="0.01" placeholder="0.00">
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label fw-bold">Notes</label>
-                        <input type="text" id="obNotes" class="form-control" placeholder="Opening cash in hand">
+                        <input type="text" id="obNotes" class="form-control" placeholder="Opening balance notes">
                     </div>
                 </div>
                 <button type="button" class="bb bb-primary mb-3" onclick="saveOpeningBalance()">
@@ -459,8 +482,8 @@ document.getElementById('openingBalanceModal').addEventListener('show.bs.modal',
                 </button>
                 <div class="table-responsive" style="max-height:260px;">
                     <table class="table table-sm mst-table">
-                        <thead><tr><th>Date</th><th class="text-end">Amount</th><th>Notes</th><th>User</th></tr></thead>
-                        <tbody id="obListBody"><tr><td colspan="4" class="text-center text-muted">Loading...</td></tr></tbody>
+                        <thead><tr><th>Date</th><th>Type</th><th class="text-end">Amount</th><th>Notes</th><th>User</th></tr></thead>
+                        <tbody id="obListBody"><tr><td colspan="5" class="text-center text-muted">Loading...</td></tr></tbody>
                     </table>
                 </div>
             </div>

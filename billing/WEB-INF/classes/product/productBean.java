@@ -8082,4 +8082,161 @@ public Vector getCustomerExchangePoints(int customerId, String fromDate, String 
     return vec;
 }
 
+public int getCategoryIdByName(String name) throws Exception {
+    if (name == null || name.trim().isEmpty()) return 0;
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        pt = con.prepareStatement(
+            "SELECT id FROM prod_category WHERE is_active=1 AND LOWER(TRIM(name))=LOWER(TRIM(?)) LIMIT 1"
+        );
+        pt.setString(1, name.trim());
+        rs = pt.executeQuery();
+        return rs.next() ? rs.getInt(1) : 0;
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception e) {}
+        if (pt != null) try { pt.close(); } catch (Exception e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+}
+
+public int getBrandIdByName(String name) throws Exception {
+    if (name == null || name.trim().isEmpty()) return 0;
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        pt = con.prepareStatement(
+            "SELECT id FROM prod_brands WHERE is_active=1 AND LOWER(TRIM(name))=LOWER(TRIM(?)) LIMIT 1"
+        );
+        pt.setString(1, name.trim());
+        rs = pt.executeQuery();
+        return rs.next() ? rs.getInt(1) : 0;
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception e) {}
+        if (pt != null) try { pt.close(); } catch (Exception e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+}
+
+public int getUnitIdByName(String name) throws Exception {
+    if (name == null || name.trim().isEmpty()) return 0;
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        pt = con.prepareStatement(
+            "SELECT id FROM prod_units WHERE is_active=1 AND LOWER(TRIM(name))=LOWER(TRIM(?)) LIMIT 1"
+        );
+        pt.setString(1, name.trim());
+        rs = pt.executeQuery();
+        return rs.next() ? rs.getInt(1) : 0;
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception e) {}
+        if (pt != null) try { pt.close(); } catch (Exception e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+}
+
+public void importProductFromBulk(
+        String categoryName, String brandName, String productName, String productCode,
+        String unitName, String costStr, String mrpStr, String stockStr, String gstStr,
+        String hsn, int uid) throws Exception {
+
+    if (productName == null || productName.trim().isEmpty()) {
+        throw new Exception("Product name is required.");
+    }
+    if (categoryName == null || categoryName.trim().isEmpty()) {
+        throw new Exception("Category is required.");
+    }
+    if (brandName == null || brandName.trim().isEmpty()) {
+        throw new Exception("Brand is required.");
+    }
+    if (unitName == null || unitName.trim().isEmpty()) {
+        throw new Exception("Unit is required.");
+    }
+    if (costStr == null || costStr.trim().isEmpty()) {
+        throw new Exception("Cost price is required.");
+    }
+    if (mrpStr == null || mrpStr.trim().isEmpty()) {
+        throw new Exception("MRP is required.");
+    }
+
+    int categoryId = getCategoryIdByName(categoryName);
+    if (categoryId == 0) {
+        throw new Exception("Category not found: " + categoryName);
+    }
+    int brandId = getBrandIdByName(brandName);
+    if (brandId == 0) {
+        throw new Exception("Brand not found: " + brandName);
+    }
+    int unitId = getUnitIdByName(unitName);
+    if (unitId == 0) {
+        throw new Exception("Unit not found: " + unitName);
+    }
+
+    if (productCode == null || productCode.trim().isEmpty()) {
+        productCode = "0";
+    }
+
+    double cost;
+    double mrp;
+    try {
+        cost = Double.parseDouble(costStr.trim());
+        mrp = Double.parseDouble(mrpStr.trim());
+    } catch (NumberFormatException e) {
+        throw new Exception("Invalid cost or MRP value.");
+    }
+
+    int gst = 0;
+    if (gstStr != null && !gstStr.trim().isEmpty()) {
+        try {
+            gst = (int) Math.round(Double.parseDouble(gstStr.trim()));
+        } catch (NumberFormatException e) {
+            throw new Exception("Invalid GST value.");
+        }
+    }
+
+    BigDecimal stock = BigDecimal.ZERO;
+    if (stockStr != null && !stockStr.trim().isEmpty()) {
+        try {
+            stock = new BigDecimal(stockStr.trim());
+        } catch (NumberFormatException e) {
+            throw new Exception("Invalid stock value.");
+        }
+    }
+
+    Vector selectedUnit = getUnitById(unitId);
+    if (selectedUnit != null && selectedUnit.size() > 3 && selectedUnit.elementAt(3) != null) {
+        BigDecimal convertionCalculation = (BigDecimal) selectedUnit.elementAt(3);
+        if (convertionCalculation.compareTo(BigDecimal.ZERO) > 0) {
+            stock = stock.multiply(convertionCalculation);
+            BigDecimal calcBD = convertionCalculation;
+            cost = new BigDecimal(cost).divide(calcBD, 6, java.math.RoundingMode.HALF_UP).doubleValue();
+            mrp = new BigDecimal(mrp).divide(calcBD, 6, java.math.RoundingMode.HALF_UP).doubleValue();
+        }
+    }
+
+    addProduct(
+        productName.trim(),
+        categoryId,
+        brandId,
+        productCode.trim(),
+        cost,
+        mrp,
+        0,
+        0.0,
+        stock,
+        uid,
+        gst,
+        unitId,
+        hsn,
+        0.0
+    );
+}
+
 }

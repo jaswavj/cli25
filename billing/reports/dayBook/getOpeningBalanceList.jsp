@@ -18,10 +18,11 @@ try {
         obj.put("id", row.get(0).toString());
         obj.put("balanceDate", row.get(1).toString());
         obj.put("amount", row.get(2).toString());
-        obj.put("notes", row.get(3).toString());
-        obj.put("userName", row.get(4).toString());
-        obj.put("entryDate", row.get(5).toString());
-        obj.put("entryTime", row.get(6).toString());
+        obj.put("balanceType", row.get(3).toString());
+        obj.put("notes", row.get(4).toString());
+        obj.put("userName", row.get(5).toString());
+        obj.put("entryDate", row.get(6).toString());
+        obj.put("entryTime", row.get(7).toString());
         arr.put(obj);
     }
 } catch (Exception e) {

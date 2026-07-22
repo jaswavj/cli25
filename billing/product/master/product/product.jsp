@@ -49,6 +49,32 @@ String type = request.getParameter("type"); // success / warning / danger / info
 <% } %>
 
     <div class="container-fluid mt-2 mst-page" style="max-width: 1600px;">
+        <!-- Bulk Upload -->
+        <div class="card mb-2" style="border: none; box-shadow: 0 2px 4px rgba(0,0,0,.07); border-radius: 8px;">
+            <div class="mst-card-header-light py-2 px-3">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h6 class="mb-0" style="font-size: 0.95rem;">
+                        <i class="fas fa-file-excel me-2"></i>Bulk Upload <%=head3%>
+                    </h6>
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <a href="<%=contextPath%>/product/master/product/downloadProductSample.jsp" class="bb bb-green btn-sm">
+                            <i class="fas fa-download me-1"></i>Download Sample Excel
+                        </a>
+                        <input type="file" id="bulkUploadFile" class="form-control form-control-sm" style="max-width:260px;" accept=".xlsx,.xls,.csv">
+                        <button type="button" id="bulkUploadBtn" class="bb bb-primary btn-sm" onclick="uploadBulkProducts()">
+                            <i class="fas fa-upload me-1"></i>Upload Excel
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body py-2 px-3">
+                <small class="text-muted">
+                    Excel columns: <strong>Category, Brand, Product Name, Product Code, Unit, Cost Price, MRP, Stock, GST, HSN</strong>.
+                    Category / Brand / Unit names must match master exactly.
+                </small>
+            </div>
+        </div>
+
         <div class="row g-2">
             <!-- Left Column - Add Product Form -->
             <div class="col-md-5">
@@ -64,7 +90,6 @@ String type = request.getParameter("type"); // success / warning / danger / info
                             <input type="hidden" name="discType" value="0">
                             <input type="hidden" name="discValue" value="0.00">
                             <input type="hidden" name="gst" value="0">
-                            <input type="hidden" name="stock" value="0">
                             <div class="col-md-6">
                                 <label style="font-size: 0.85rem;"><%=head1%> <span style="color:red">*</span></label>
                                 <select name="categoryId" class="form-select" style="padding: 7px 10px; font-size: 0.9rem;" required>
@@ -141,12 +166,17 @@ String type = request.getParameter("type"); // success / warning / danger / info
                             </div>
                             
                             <div class="col-md-6 ">
-                                <label id="costPriceLabel" style="font-size: 0.85rem;">Cost Price <span style="color:red">*</span></label><input type="number" step="0.001" name="cost" id="costInput" class="form-control" placeholder=" " style="padding: 7px 10px; font-size: 0.9rem;" required>
+                                <label id="costPriceLabel" style="font-size: 0.85rem;">Cost Price <span style="color:red">*</span></label><input type="number" step="0.001" name="cost" id="costInput" class="form-control" placeholder="0.000" style="padding: 7px 10px; font-size: 0.9rem;" required>
                                 <small id="costConversionNote" class="text-muted d-block mt-1"></small>
                             </div>
                             <div class="col-md-6 ">
-                                <label id="mrpLabel" style="font-size: 0.85rem;">MRP <span style="color:red">*</span></label><input type="number" step="0.001" name="mrp" id="mrpInput" class="form-control" placeholder=" " style="padding: 7px 10px; font-size: 0.9rem;" required>
+                                <label id="mrpLabel" style="font-size: 0.85rem;">MRP <span style="color:red">*</span></label><input type="number" step="0.001" name="mrp" id="mrpInput" class="form-control" placeholder="0.000" style="padding: 7px 10px; font-size: 0.9rem;" required>
                                 <small id="mrpConversionNote" class="text-muted d-block mt-1"></small>
+                            </div>
+                            <div class="col-md-12">
+                                <label id="stockLabel" style="font-size: 0.85rem;">Opening Stock</label>
+                                <input type="number" step="0.001" name="stock" id="stockInput" class="form-control" placeholder="0" value="0" min="0" style="padding: 7px 10px; font-size: 0.9rem;">
+                                <small id="stockConversionNote" class="text-muted d-block mt-1"></small>
                             </div>
                             <div class="col-md-12 mt-2 d-flex gap-2">
                                 <button type="submit" id="submitBtn" class="bb bb-primary flex-grow-1">
@@ -217,6 +247,7 @@ String type = request.getParameter("type"); // success / warning / danger / info
     </div>
 
     <!-- Bootstrap JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <script>
     const contextPath = '<%=contextPath%>';
@@ -225,14 +256,17 @@ String type = request.getParameter("type"); // success / warning / danger / info
         const unitSelect = document.getElementById('unitSelect');
         const costInput = document.getElementById('costInput');
         const mrpInput = document.getElementById('mrpInput');
+        const stockInput = document.getElementById('stockInput');
         const costNote = document.getElementById('costConversionNote');
         const mrpNote = document.getElementById('mrpConversionNote');
+        const stockNote = document.getElementById('stockConversionNote');
         if (!unitSelect || !costInput || !mrpInput || !costNote || !mrpNote) return;
 
         const selectedOption = unitSelect.options[unitSelect.selectedIndex];
         if (!selectedOption || unitSelect.value === '') {
             costNote.textContent = '';
             mrpNote.textContent = '';
+            if (stockNote) stockNote.textContent = '';
             return;
         }
 
@@ -240,10 +274,12 @@ String type = request.getParameter("type"); // success / warning / danger / info
         const convertionCalculation = parseFloat(selectedOption.getAttribute('data-convertion-calculation') || '0');
         const costValue = parseFloat(costInput.value || '0');
         const mrpValue = parseFloat(mrpInput.value || '0');
+        const stockValue = stockInput ? parseFloat(stockInput.value || '0') : 0;
 
         if (convertionUnit.trim() === '' || isNaN(convertionCalculation) || convertionCalculation <= 0) {
             costNote.textContent = '';
             mrpNote.textContent = '';
+            if (stockNote) stockNote.textContent = '';
             return;
         }
 
@@ -260,19 +296,29 @@ String type = request.getParameter("type"); // success / warning / danger / info
         } else {
             mrpNote.textContent = '';
         }
+
+        if (stockNote && !isNaN(stockValue) && stockValue > 0) {
+            const convertedStock = stockValue * convertionCalculation;
+            stockNote.textContent = 'Stored stock in ' + convertionUnit + ': ' + convertedStock.toFixed(3);
+        } else if (stockNote) {
+            stockNote.textContent = '';
+        }
     }
 
     function handleUnitChange(select) {
         const selectedText = select.options[select.selectedIndex].text;
         const costPriceLabel = document.getElementById('costPriceLabel');
         const mrpLabel = document.getElementById('mrpLabel');
+        const stockLabel = document.getElementById('stockLabel');
         
         if (select.value === "") {
-            costPriceLabel.textContent = "Cost Price";
-            mrpLabel.textContent = "MRP";
+            costPriceLabel.innerHTML = 'Cost Price <span style="color:red">*</span>';
+            mrpLabel.innerHTML = 'MRP <span style="color:red">*</span>';
+            if (stockLabel) stockLabel.textContent = "Opening Stock";
         } else {
-            costPriceLabel.textContent = "Cost Price per " + selectedText;
-            mrpLabel.textContent = "MRP per " + selectedText;
+            costPriceLabel.innerHTML = 'Cost Price per ' + selectedText + ' <span style="color:red">*</span>';
+            mrpLabel.innerHTML = 'MRP per ' + selectedText + ' <span style="color:red">*</span>';
+            if (stockLabel) stockLabel.textContent = 'Opening Stock (' + selectedText + ')';
         }
 
         updateConvertedPriceNotes();
@@ -467,6 +513,7 @@ String type = request.getParameter("type"); // success / warning / danger / info
     // Product search functionality with debouncing
     document.getElementById('costInput').addEventListener('input', updateConvertedPriceNotes);
     document.getElementById('mrpInput').addEventListener('input', updateConvertedPriceNotes);
+    document.getElementById('stockInput').addEventListener('input', updateConvertedPriceNotes);
 
     document.getElementById('productSearch').addEventListener('input', function() {
         const searchTerm = this.value.trim();
@@ -519,6 +566,10 @@ String type = request.getParameter("type"); // success / warning / danger / info
         const editMrp = (!isNaN(convertionCalculation) && convertionCalculation > 0 && !isNaN(parsedMrp)) ? (parsedMrp * convertionCalculation) : parsedMrp;
         form.querySelector('[name="cost"]').value = !isNaN(editCost) ? editCost : '';
         form.querySelector('[name="mrp"]').value = !isNaN(editMrp) ? editMrp : '';
+        const parsedStock = parseFloat(product.stock || '0');
+        const editStock = (!isNaN(convertionCalculation) && convertionCalculation > 0 && !isNaN(parsedStock))
+            ? (parsedStock / convertionCalculation) : parsedStock;
+        form.querySelector('[name="stock"]').value = !isNaN(editStock) ? editStock : '0';
 
         handleUnitChange(unitSelect);
 
@@ -553,10 +604,13 @@ String type = request.getParameter("type"); // success / warning / danger / info
         document.querySelector('.card-header h6').innerHTML = '<i class="fas fa-plus-circle me-2"></i>Add New Product';
 
         // Reset labels
-        document.getElementById('costPriceLabel').textContent = 'Cost Price';
-        document.getElementById('mrpLabel').textContent = 'MRP';
+        document.getElementById('costPriceLabel').innerHTML = 'Cost Price <span style="color:red">*</span>';
+        document.getElementById('mrpLabel').innerHTML = 'MRP <span style="color:red">*</span>';
+        document.getElementById('stockLabel').textContent = 'Opening Stock';
         document.getElementById('costConversionNote').textContent = '';
         document.getElementById('mrpConversionNote').textContent = '';
+        document.getElementById('stockConversionNote').textContent = '';
+        document.getElementById('stockInput').value = '0';
 
         // Re-select defaults (NOS unit, Others brand)
         const unitSelect = document.querySelector('[name="unitId"]');
@@ -578,6 +632,164 @@ String type = request.getParameter("type"); // success / warning / danger / info
         handleUnitChange(document.getElementById('unitSelect'));
         updateConvertedPriceNotes();
     });
-</script>
+
+    function normalizeBulkHeader(h) {
+        return String(h || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    function parseCsvText(text) {
+        const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim() !== '');
+        return lines.map(line => {
+            const cells = [];
+            let cur = '';
+            let inQuote = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (ch === '"') {
+                    inQuote = !inQuote;
+                    continue;
+                }
+                if ((ch === ',' || ch === '\t') && !inQuote) {
+                    cells.push(cur.trim());
+                    cur = '';
+                    continue;
+                }
+                cur += ch;
+            }
+            cells.push(cur.trim());
+            return cells;
+        });
+    }
+
+    function tableRowsToProducts(tableRows) {
+        if (!tableRows || !tableRows.length) return [];
+        const headerMap = {};
+        tableRows[0].forEach((h, idx) => {
+            headerMap[normalizeBulkHeader(h)] = idx;
+        });
+
+        const pick = (row, ...keys) => {
+            for (const key of keys) {
+                const idx = headerMap[key];
+                if (idx !== undefined && row[idx] !== undefined && String(row[idx]).trim() !== '') {
+                    return String(row[idx]).trim();
+                }
+            }
+            return '';
+        };
+
+        const products = [];
+        for (let r = 1; r < tableRows.length; r++) {
+            const row = tableRows[r];
+            if (!row || row.every(c => String(c || '').trim() === '')) continue;
+            const productName = pick(row, 'productname', 'name');
+            if (!productName) continue;
+            products.push({
+                category: pick(row, 'category'),
+                brand: pick(row, 'brand'),
+                productName: productName,
+                productCode: pick(row, 'productcode', 'code'),
+                unit: pick(row, 'unit', 'unitsize'),
+                cost: pick(row, 'costprice', 'cost'),
+                mrp: pick(row, 'mrp'),
+                stock: pick(row, 'stock'),
+                gst: pick(row, 'gst'),
+                hsn: pick(row, 'hsn')
+            });
+        }
+        return products;
+    }
+
+    function readBulkUploadFile(file) {
+        return new Promise((resolve, reject) => {
+            const ext = (file.name.split('.').pop() || '').toLowerCase();
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('Could not read file.'));
+
+            if (ext === 'csv') {
+                reader.onload = e => {
+                    try {
+                        resolve(tableRowsToProducts(parseCsvText(e.target.result)));
+                    } catch (err) {
+                        reject(err);
+                    }
+                };
+                reader.readAsText(file);
+                return;
+            }
+
+            reader.onload = e => {
+                try {
+                    if (typeof XLSX === 'undefined') {
+                        reject(new Error('Excel library not loaded. Please use CSV or refresh the page.'));
+                        return;
+                    }
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+                    resolve(tableRowsToProducts(rows));
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    async function uploadBulkProducts() {
+        const fileInput = document.getElementById('bulkUploadFile');
+        const file = fileInput.files[0];
+        if (!file) {
+            Swal.fire({ icon: 'warning', title: 'Select File', text: 'Please choose an Excel or CSV file.' });
+            return;
+        }
+
+        const btn = document.getElementById('bulkUploadBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading...';
+
+        try {
+            const rows = await readBulkUploadFile(file);
+            if (!rows.length) {
+                Swal.fire({ icon: 'warning', title: 'No Data', text: 'No product rows found. Check headers and data rows.' });
+                return;
+            }
+
+            const response = await fetch(contextPath + '/product/master/product/bulkUploadProducts.jsp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+                body: JSON.stringify({ rows })
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                let html = result.message;
+                if (result.errors && result.errors.length) {
+                    html += '<br><br><div style="text-align:left;max-height:180px;overflow:auto;font-size:13px;">';
+                    result.errors.forEach(err => { html += err + '<br>'; });
+                    html += '</div>';
+                }
+                Swal.fire({
+                    icon: result.failed > 0 ? 'warning' : 'success',
+                    title: result.failed > 0 ? 'Partial Import' : 'Import Complete',
+                    html: html,
+                    width: 520
+                });
+                if (result.imported > 0) {
+                    fileInput.value = '';
+                    loadProducts(1, currentSearch);
+                }
+            } else {
+                Swal.fire({ icon: 'error', title: 'Upload Failed', text: result.message || 'Could not import products.' });
+            }
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'Upload failed.' });
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-upload me-1"></i>Upload Excel';
+        }
+    }
+    </script>
 </body>
 </html>

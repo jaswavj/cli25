@@ -3685,6 +3685,31 @@ public double getTotalPurchasesByDateRange(String from, String to) throws Except
     return totalPurchases;
 }
 
+public double getTotalExpensesByDateRange(String from, String to) throws Exception {
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    double totalExpenses = 0.0;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        pt = con.prepareStatement(
+            "SELECT COALESCE(SUM(amount),0) FROM expense_entry "
+            + "WHERE is_active=1 AND DATE(exc_date_time) BETWEEN ? AND ?"
+        );
+        pt.setString(1, from);
+        pt.setString(2, to);
+        rs = pt.executeQuery();
+        if (rs.next()) {
+            totalExpenses = rs.getDouble(1);
+        }
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception e) {}
+        if (pt != null) try { pt.close(); } catch (Exception e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+    return totalExpenses;
+}
+
 public double getTodaySales() throws Exception {
     Connection con = null;
     PreparedStatement pt = null;
@@ -6785,7 +6810,7 @@ private boolean hasManualOpeningBalanceUpTo(String fromDate) throws Exception {
     try {
         con = util.DBConnectionManager.getConnectionFromPool();
         ps = con.prepareStatement(
-            "SELECT 1 FROM daybook_opening_balance WHERE is_active=1 AND balance_date <= ? LIMIT 1"
+            "SELECT 1 FROM daybook_opening_balance WHERE is_active=1 AND balance_type='cash' AND balance_date <= ? LIMIT 1"
         );
         ps.setString(1, fromDate);
         rs = ps.executeQuery();
@@ -6854,8 +6879,8 @@ public Vector getDayBookCashBook(String fromDate, String toDate) throws Exceptio
             + "         CASE WHEN ob.amount >= 0 THEN ob.amount ELSE 0 END,"
             + "         CASE WHEN ob.amount < 0 THEN ABS(ob.amount) ELSE 0 END"
             + "  FROM daybook_opening_balance ob"
-            + "  WHERE ob.is_active=1 AND ob.balance_date BETWEEN ? AND ?"
-            + " ) t ORDER BY CASE WHEN t.category='Opening Balance' THEN 0 ELSE 1 END,"
+            + "  WHERE ob.is_active=1 AND ob.balance_type='cash' AND ob.balance_date BETWEEN ? AND ?"
+            + " ) t ORDER BY CASE WHEN t.category IN ('Opening Balance','Bank Opening Balance') THEN 0 ELSE 1 END,"
             + " t.txn_date, t.txn_time, t.category, t.description";
         ps = con.prepareStatement(sql);
         for (int i = 1; i <= 13; i += 2) { ps.setString(i, fromDate); ps.setString(i + 1, toDate); }
@@ -6938,12 +6963,12 @@ public Vector getDayBookDetail(String fromDate, String toDate) throws Exception 
             + "  FROM expense_entry ee LEFT JOIN expense_type et ON et.id=ee.exp_type"
             + "  WHERE ee.is_active=1 AND DATE(ee.exc_date_time) BETWEEN ? AND ?"
             + "  UNION ALL"
-            + "  SELECT ob.balance_date, ob.entry_time, 'Opening Balance',"
-            + "         COALESCE(NULLIF(ob.notes,''), 'Manual Opening Balance'),"
-            + "         ob.amount, 0.0, 0.0, ob.amount"
+            + "  SELECT ob.balance_date, ob.entry_time, 'Bank Opening Balance',"
+            + "         COALESCE(NULLIF(ob.notes,''), 'Bank Opening Balance'),"
+            + "         0.0, 0.0, ob.amount, ob.amount"
             + "  FROM daybook_opening_balance ob"
-            + "  WHERE ob.is_active=1 AND ob.balance_date BETWEEN ? AND ?"
-            + " ) t ORDER BY CASE WHEN t.category='Opening Balance' THEN 0 ELSE 1 END,"
+            + "  WHERE ob.is_active=1 AND ob.balance_type='bank' AND ob.balance_date BETWEEN ? AND ?"
+            + " ) t ORDER BY CASE WHEN t.category IN ('Opening Balance','Bank Opening Balance') THEN 0 ELSE 1 END,"
             + " t.txn_date, t.txn_time, t.category, t.description";
         ps = con.prepareStatement(sql);
         for (int i = 1; i <= 13; i += 2) { ps.setString(i, fromDate); ps.setString(i + 1, toDate); }
@@ -6968,7 +6993,14 @@ public Vector getDayBookDetail(String fromDate, String toDate) throws Exception 
     return vec;
 }
 
-public int saveDayBookOpeningBalance(String balanceDate, double amount, String notes, int uid) throws Exception {
+public int saveDayBookOpeningBalance(String balanceDate, double amount, String notes, String balanceType, int uid) throws Exception {
+    if (balanceType == null || balanceType.trim().isEmpty()) {
+        balanceType = "cash";
+    }
+    balanceType = balanceType.trim().toLowerCase();
+    if (!"cash".equals(balanceType) && !"bank".equals(balanceType)) {
+        throw new Exception("Invalid balance type. Use cash or bank.");
+    }
     Connection con = null;
     PreparedStatement ps = null;
     ResultSet rs = null;
@@ -6976,14 +7008,15 @@ public int saveDayBookOpeningBalance(String balanceDate, double amount, String n
         con = util.DBConnectionManager.getConnectionFromPool();
         con.setAutoCommit(false);
         ps = con.prepareStatement(
-            "INSERT INTO daybook_opening_balance (balance_date, amount, notes, uid, entry_date, entry_time, is_active) "
-            + "VALUES (?, ?, ?, ?, CURDATE(), CURTIME(), 1)",
+            "INSERT INTO daybook_opening_balance (balance_date, amount, balance_type, notes, uid, entry_date, entry_time, is_active) "
+            + "VALUES (?, ?, ?, ?, ?, CURDATE(), CURTIME(), 1)",
             Statement.RETURN_GENERATED_KEYS
         );
         ps.setString(1, balanceDate);
         ps.setDouble(2, amount);
-        ps.setString(3, notes != null ? notes : "");
-        ps.setInt(4, uid);
+        ps.setString(3, balanceType);
+        ps.setString(4, notes != null ? notes : "");
+        ps.setInt(5, uid);
         int rows = ps.executeUpdate();
         if (rows != 1) {
             throw new Exception("Opening balance was not saved. No row inserted.");
@@ -7014,7 +7047,7 @@ public double getManualOpeningBalanceBefore(String fromDate) throws Exception {
         con = util.DBConnectionManager.getConnectionFromPool();
         ps = con.prepareStatement(
             "SELECT COALESCE(SUM(amount),0) FROM daybook_opening_balance "
-            + "WHERE is_active=1 AND balance_date < ?"
+            + "WHERE is_active=1 AND balance_type='cash' AND balance_date < ?"
         );
         ps.setString(1, fromDate);
         rs = ps.executeQuery();
@@ -7027,13 +7060,37 @@ public double getManualOpeningBalanceBefore(String fromDate) throws Exception {
     return total;
 }
 
+public double getManualBankOpeningBalanceBefore(String fromDate) throws Exception {
+    Connection con = null; PreparedStatement ps = null; ResultSet rs = null;
+    double total = 0;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        ps = con.prepareStatement(
+            "SELECT COALESCE(SUM(amount),0) FROM daybook_opening_balance "
+            + "WHERE is_active=1 AND balance_type='bank' AND balance_date < ?"
+        );
+        ps.setString(1, fromDate);
+        rs = ps.executeQuery();
+        if (rs.next()) total = rs.getDouble(1);
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception e) {}
+        if (ps != null) try { ps.close(); } catch (Exception e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+    return total;
+}
+
+public double getDayBookBankOpeningBalance(String fromDate) throws Exception {
+    return getManualBankOpeningBalanceBefore(fromDate);
+}
+
 public Vector getDayBookOpeningBalanceList() throws Exception {
     Connection con = null; PreparedStatement ps = null; ResultSet rs = null;
     Vector vec = new Vector();
     try {
         con = util.DBConnectionManager.getConnectionFromPool();
         ps = con.prepareStatement(
-            "SELECT ob.id, ob.balance_date, ob.amount, COALESCE(ob.notes,''), "
+            "SELECT ob.id, ob.balance_date, ob.amount, ob.balance_type, COALESCE(ob.notes,''), "
             + "COALESCE(u.user_name,''), ob.entry_date, ob.entry_time "
             + "FROM daybook_opening_balance ob "
             + "LEFT JOIN users u ON u.id = ob.uid "
@@ -7050,6 +7107,7 @@ public Vector getDayBookOpeningBalanceList() throws Exception {
             row.addElement(rs.getString(5));
             row.addElement(rs.getString(6));
             row.addElement(rs.getString(7));
+            row.addElement(rs.getString(8));
             vec.addElement(row);
         }
     } finally {

@@ -182,6 +182,7 @@ CREATE TABLE `daybook_opening_balance` (
   `id` int NOT NULL AUTO_INCREMENT,
   `balance_date` date NOT NULL,
   `amount` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `balance_type` varchar(10) NOT NULL DEFAULT 'cash' COMMENT 'cash = Cash Book opening, bank = Day Book bank opening',
   `notes` varchar(255) DEFAULT NULL,
   `uid` int DEFAULT NULL,
   `entry_date` date NOT NULL,
@@ -189,13 +190,16 @@ CREATE TABLE `daybook_opening_balance` (
   `is_active` tinyint(1) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
   KEY `idx_balance_date` (`balance_date`),
-  KEY `idx_active_date` (`is_active`,`balance_date`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  KEY `idx_active_date` (`is_active`,`balance_date`),
+  KEY `idx_balance_type` (`balance_type`,`is_active`,`balance_date`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 /*Data for the table `daybook_opening_balance` */
 
-insert  into `daybook_opening_balance`(`id`,`balance_date`,`amount`,`notes`,`uid`,`entry_date`,`entry_time`,`is_active`) values 
-(2,'2026-07-21',10000.00,'',1,'2026-07-21','23:03:39',1);
+insert  into `daybook_opening_balance`(`id`,`balance_date`,`amount`,`balance_type`,`notes`,`uid`,`entry_date`,`entry_time`,`is_active`) values 
+(2,'2026-07-21',10000.00,'cash','',1,'2026-07-21','23:03:39',1),
+(3,'2026-07-22',1000.00,'cash','',1,'2026-07-22','21:26:19',1),
+(4,'2026-07-22',1000.00,'bank','',1,'2026-07-22','21:26:25',1);
 
 /*Table structure for table `expense_entry` */
 
@@ -313,13 +317,17 @@ CREATE TABLE `prod_batch` (
   KEY `prod` (`product_id`),
   KEY `disc` (`disc_type`),
   KEY `uid` (`uid`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=latin1;
 
 /*Data for the table `prod_batch` */
 
 insert  into `prod_batch`(`id`,`name`,`product_id`,`cost`,`mrp`,`commission`,`stock`,`disc_type`,`discount`,`date`,`time`,`added_stock`,`uid`) values 
 (1,'Z101',1,10.000,20.000,0.000,97.00,0,0.000,'2026-07-21','22:27:15',0.00,1),
-(2,'Z102',2,15.000,20.000,0.000,98.00,0,0.000,'2026-07-21','22:27:27',0.00,1);
+(2,'Z102',2,15.000,20.000,0.000,98.00,0,0.000,'2026-07-21','22:27:27',0.00,1),
+(3,'Z103',3,35.000,50.000,0.000,0.00,0,0.000,'2026-07-22','22:24:31',0.00,1),
+(4,'Z1011',4,5.000,12.000,0.000,100.00,0,0.000,'2026-07-22','22:31:05',100.00,1),
+(5,'Z1021',5,10.000,25.000,0.000,50.00,0,0.000,'2026-07-22','22:31:05',50.00,1),
+(6,'Z1031',6,35.000,50.000,0.000,0.00,0,0.000,'2026-07-22','22:31:05',0.00,1);
 
 /*Table structure for table `prod_batch_updated` */
 
@@ -750,7 +758,7 @@ CREATE TABLE `prod_lifecycle` (
   KEY `uid` (`uid`),
   KEY `stock` (`stockAdjType`),
   KEY `billId` (`bill_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=latin1;
 
 /*Data for the table `prod_lifecycle` */
 
@@ -763,7 +771,11 @@ insert  into `prod_lifecycle`(`id`,`bill_id`,`batch_id`,`product_id`,`stock_in`,
 (6,2,2,2,0.00,1.00,99.00,0,'WHILE BILLING','2026-07-21','22:33:46',1,1,0),
 (7,3,1,1,0.00,1.00,98.00,0,'WHILE BILLING','2026-07-21','22:34:13',1,1,0),
 (8,3,2,2,0.00,1.00,98.00,0,'WHILE BILLING','2026-07-21','22:34:13',1,1,0),
-(9,4,1,1,0.00,1.00,97.00,0,'WHILE BILLING','2026-07-21','22:47:39',1,1,0);
+(9,4,1,1,0.00,1.00,97.00,0,'WHILE BILLING','2026-07-21','22:47:39',1,1,0),
+(10,0,3,3,0.00,0.00,0.00,0,'WHILE ADD PRODUCT','2026-07-22','22:24:31',1,1,0),
+(11,0,4,4,100.00,0.00,100.00,0,'WHILE ADD PRODUCT','2026-07-22','22:31:05',1,1,0),
+(12,0,5,5,50.00,0.00,50.00,0,'WHILE ADD PRODUCT','2026-07-22','22:31:05',1,1,0),
+(13,0,6,6,0.00,0.00,0.00,0,'WHILE ADD PRODUCT','2026-07-22','22:31:05',1,1,0);
 
 /*Table structure for table `prod_order` */
 
@@ -823,13 +835,17 @@ CREATE TABLE `prod_product` (
   KEY `brand` (`brand_id`),
   KEY `uid` (`uid`),
   KEY `unit` (`unit_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=latin1;
 
 /*Data for the table `prod_product` */
 
 insert  into `prod_product`(`id`,`name`,`code`,`category_id`,`brand_id`,`unit_id`,`hsn`,`uid`,`date`,`time`,`is_active`,`gst`) values 
 (1,'Pencil','101',1,1,1,NULL,1,'2026-07-21','22:27:15',1,0),
-(2,'Gen Pen','102',1,1,1,NULL,1,'2026-07-21','22:27:27',1,0);
+(2,'Gen Pen','102',1,1,1,NULL,1,'2026-07-21','22:27:27',1,0),
+(3,'A4 Notebook','103',1,1,1,NULL,1,'2026-07-22','22:24:31',1,5),
+(4,'Pencils','1011',1,1,1,NULL,1,'2026-07-22','22:31:05',1,0),
+(5,'Gen Pens','1021',1,1,1,NULL,1,'2026-07-22','22:31:05',1,0),
+(6,'A4 Notebooks','1031',1,1,1,NULL,1,'2026-07-22','22:31:05',1,0);
 
 /*Table structure for table `prod_product_components` */
 
