@@ -6,8 +6,10 @@
 String fromDate    = request.getParameter("fromDate");
 String toDate      = request.getParameter("toDate");
 String reportType  = request.getParameter("reportType");
-if (reportType == null || reportType.trim().isEmpty()) reportType = "product";
+if (reportType == null || reportType.trim().isEmpty()) reportType = "netprofit";
 boolean isBillWise = "bill".equals(reportType);
+boolean isNetProfit = "netprofit".equals(reportType);
+String modeLabel = isNetProfit ? "Net Profit (Sales − Purchase − Expense)" : (isBillWise ? "Bill-wise (Cost vs MRP)" : "Product-wise (Cost vs MRP)");
 %>
 <!DOCTYPE html>
 <html lang="en">
@@ -20,13 +22,13 @@ boolean isBillWise = "bill".equals(reportType);
     <jsp:include page="/assets/navbar/navbar.jsp" />
 <%
     request.setAttribute("pageTitle",    "Profit Analysis");
-    request.setAttribute("pageSubtitle", "Reports — Profit by Bill");
+    request.setAttribute("pageSubtitle", isNetProfit ? "Total Sales − Total Purchase − Total Expense" : "Cost vs MRP Margin");
     request.setAttribute("pageIcon",     "fa-solid fa-chart-line");
 %>
 <jsp:include page="/assets/common/pageHeader.jsp" />
 
 <div class="container-fluid mt-3 mst-page">
-<p class="mb-1 text-muted"><strong>Period:</strong> <%= fromDate %> — <%= toDate %> &nbsp;|&nbsp; <strong>Mode:</strong> <%= isBillWise ? "Bill-wise" : "Product-wise" %></p>
+<p class="mb-1 text-muted"><strong>Period:</strong> <%= fromDate %> — <%= toDate %> &nbsp;|&nbsp; <strong>Mode:</strong> <%= modeLabel %></p>
     <div class="d-flex gap-2 mb-3 no-print">
         <a href="<%=contextPath%>/reports/profitAnalysis/page.jsp" class="bb bb-outline"><i class="fa-solid fa-arrow-left me-1"></i>Back</a>
         <button class="bb bb-navy" onclick="printReport()"><i class="fa-solid fa-print me-1"></i>Print</button>
@@ -38,7 +40,79 @@ double totalCostSum   = 0.0;
 double totalSaleSum   = 0.0;
 double totalProfitSum = 0.0;
 
-if (isBillWise) {
+if (isNetProfit) {
+    double saleTotal     = bill.getTotalSalesByDateRange(fromDate, toDate);
+    double purchaseTotal = bill.getTotalPurchasesByDateRange(fromDate, toDate);
+    double expenseTotal  = bill.getTotalExpensesByDateRange(fromDate, toDate);
+    double netProfit     = saleTotal - purchaseTotal - expenseTotal;
+%>
+<!-- Net Profit Summary -->
+<div class="row mb-4 g-3">
+    <div class="col-md-3">
+        <div class="card mst-card">
+            <div class="card-body">
+                <h6 class="text-muted">Total Sales</h6>
+                <h4 style="color:var(--bill-navy-mid)">&#8377; <%= String.format("%,.2f", saleTotal) %></h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card mst-card">
+            <div class="card-body">
+                <h6 class="text-muted">Total Purchase</h6>
+                <h4 style="color:var(--bill-navy)">&#8377; <%= String.format("%,.2f", purchaseTotal) %></h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card mst-card">
+            <div class="card-body">
+                <h6 class="text-muted">Total Expense</h6>
+                <h4 style="color:#9a3412">&#8377; <%= String.format("%,.2f", expenseTotal) %></h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card mst-card">
+            <div class="card-body">
+                <h6 class="text-muted">Net Profit</h6>
+                <h4 style="color:<%= netProfit >= 0 ? "var(--bill-green)" : "var(--bill-red)" %>">&#8377; <%= String.format("%,.2f", netProfit) %></h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive">
+<table id="printTable" class="table mb-0 mst-table">
+    <thead>
+        <tr>
+            <th>Description</th>
+            <th class="text-end">Amount</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Total Sales <span class="text-muted">(bill payable, is_cancelled = 0)</span></td>
+            <td class="text-end">&#8377; <%= String.format("%,.2f", saleTotal) %></td>
+        </tr>
+        <tr>
+            <td>Total Purchase <span class="text-muted">(purchase total, is_cancelled = 0)</span></td>
+            <td class="text-end">&#8377; <%= String.format("%,.2f", purchaseTotal) %></td>
+        </tr>
+        <tr>
+            <td>Total Expense <span class="text-muted">(active expenses)</span></td>
+            <td class="text-end">&#8377; <%= String.format("%,.2f", expenseTotal) %></td>
+        </tr>
+    </tbody>
+    <tfoot style="background:var(--bill-bg);font-weight:700">
+        <tr>
+            <td class="text-end">Net Profit = Total Sales &minus; Total Purchase &minus; Total Expense</td>
+            <td class="text-end" style="color:<%= netProfit >= 0 ? "var(--bill-green)" : "var(--bill-red)" %>">&#8377; <%= String.format("%,.2f", netProfit) %></td>
+        </tr>
+    </tfoot>
+</table>
+</div>
+<% } else if (isBillWise) {
     Vector vec = bill.getBillWiseProfitReport(fromDate, toDate);
     for (int i = 0; i < vec.size(); i++) {
         Vector row = (Vector) vec.elementAt(i);

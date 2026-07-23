@@ -37,7 +37,11 @@ if (discParam != null && !discParam.trim().isEmpty()) {
     }
 }
 
-BigDecimal stock = new BigDecimal(request.getParameter("stock"));
+BigDecimal stock = BigDecimal.ZERO;
+String stockParam = request.getParameter("stock");
+if (stockParam != null && !stockParam.trim().isEmpty()) {
+    stock = new BigDecimal(stockParam.trim());
+}
 
 // Convert stock, cost, mrp, and commission when unit has conversion setup.
 Vector selectedUnit = prod.getUnitById(unitId);

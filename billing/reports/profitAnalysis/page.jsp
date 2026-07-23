@@ -16,7 +16,7 @@ String today = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
     <jsp:include page="/assets/navbar/navbar.jsp" />
 <%
     request.setAttribute("pageTitle",    "Profit Analysis");
-    request.setAttribute("pageSubtitle", "Reports — Profit by Bill");
+    request.setAttribute("pageSubtitle", "Total Sales − Total Purchase − Total Expense");
     request.setAttribute("pageIcon",     "fa-solid fa-chart-line");
 %>
 <jsp:include page="/assets/common/pageHeader.jsp" />
@@ -40,8 +40,9 @@ String today = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
         <div class="col-md-3">
             <label for="reportType" class="form-label">Report Type:</label>
             <select id="reportType" name="reportType" class="form-select">
-                <option value="product">Product-wise Profit</option>
-                <option value="bill">Bill-wise Profit / Loss</option>
+                <option value="netprofit" selected>Net Profit (Sales − Purchase − Expense)</option>
+                <option value="product">Product-wise (Cost vs MRP)</option>
+                <option value="bill">Bill-wise (Cost vs MRP)</option>
             </select>
         </div>
 
