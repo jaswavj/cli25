@@ -40,6 +40,11 @@ Vector billDetails = bill.getSupplierBillAmount(billId);
 <jsp:include page="/assets/common/pageHeader.jsp" />
 
 <div class="container-fluid mt-3 mst-page">
+    <div class="mb-3">
+        <a href="<%=contextPath%>/product/supplierPayment/page1.jsp?supId=<%=supId%>" class="bb bb-outline">
+            <i class="fa-solid fa-arrow-left me-1"></i>Back to Supplier
+        </a>
+    </div>
 
         <form id="payForm" action="<%= request.getContextPath() %>/product/supplierPayment/saveDuePayment.jsp" method="post" class="row g-3">
             <input type="hidden" name="billId" value="<%=billId%>">

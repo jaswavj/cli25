@@ -4152,6 +4152,18 @@ public String savePurchaseBill(String invArr, String payArr, String prodArr, int
         pt.setInt(7, uid);
         pt.setString(8, "Payment for Purchase Bill");  // You can customize this message as needed
         pt.executeUpdate();
+
+        double balanceAmt = Double.parseDouble(balanceAmount);
+        if (balanceAmt > 0) {
+            pt = con.prepareStatement("UPDATE prod_supplier SET balance = COALESCE(balance,0) + ? WHERE id = ?");
+            pt.setDouble(1, balanceAmt);
+            pt.setInt(2, Integer.parseInt(supplier));
+            pt.executeUpdate();
+            pt.close();
+            logSupplierBalanceEntry(con, Integer.parseInt(supplier), balanceAmt, "purchase",
+                "Purchase balance " + purchaseNo, uid, purids);
+        }
+
         // Process product details
         if (prodArr != null && !prodArr.trim().isEmpty()) {
             String[] productRows = prodArr.split("<@>");
@@ -4514,6 +4526,17 @@ public String savePurchaseBill(String invArr, String payArr, String prodArr, int
         pt.setString(8, mode != null && mode.equals("from-po") ? "Payment for Purchase from PO" : "Payment for Purchase Bill");
         pt.executeUpdate();
         pt.close();
+
+        double balanceAmt2 = Double.parseDouble(balanceAmount);
+        if (balanceAmt2 > 0) {
+            pt = con.prepareStatement("UPDATE prod_supplier SET balance = COALESCE(balance,0) + ? WHERE id = ?");
+            pt.setDouble(1, balanceAmt2);
+            pt.setInt(2, Integer.parseInt(supplier));
+            pt.executeUpdate();
+            pt.close();
+            logSupplierBalanceEntry(con, Integer.parseInt(supplier), balanceAmt2, "purchase",
+                "Purchase balance " + purchaseNo, uid, purids);
+        }
         
         // Process product details
         if (prodArr != null && !prodArr.trim().isEmpty()) {
@@ -8237,6 +8260,90 @@ public void importProductFromBulk(
         hsn,
         0.0
     );
+}
+
+private void logSupplierBalanceEntry(Connection con, int supplierId, double amount, String type,
+        String notes, int uid, int referenceId) throws SQLException {
+    PreparedStatement pt = null;
+    try {
+        pt = con.prepareStatement(
+            "INSERT INTO prod_supplier_balance_log (supplier_id, amount, type, notes, uid, reference_id, entry_date, entry_time) "
+            + "VALUES (?, ?, ?, ?, ?, ?, CURDATE(), CURTIME())"
+        );
+        pt.setInt(1, supplierId);
+        pt.setDouble(2, amount);
+        pt.setString(3, type);
+        pt.setString(4, notes != null ? notes : "");
+        pt.setInt(5, uid);
+        if (referenceId > 0) {
+            pt.setInt(6, referenceId);
+        } else {
+            pt.setNull(6, Types.INTEGER);
+        }
+        pt.executeUpdate();
+    } catch (SQLException e) {
+        if (e.getMessage() != null && e.getMessage().toLowerCase().contains("prod_supplier_balance_log")) {
+            return;
+        }
+        throw e;
+    } finally {
+        if (pt != null) try { pt.close(); } catch (SQLException e) {}
+    }
+}
+
+public void addSupplierOpeningBalance(int supplierId, double amount, String notes, int uid) throws Exception {
+    if (supplierId <= 0) throw new Exception("Supplier is required.");
+    if (amount <= 0) throw new Exception("Amount must be greater than zero.");
+    Connection con = null;
+    PreparedStatement pt = null;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        con.setAutoCommit(false);
+        pt = con.prepareStatement("UPDATE prod_supplier SET balance = COALESCE(balance,0) + ? WHERE id = ? AND is_active=1");
+        pt.setDouble(1, amount);
+        pt.setInt(2, supplierId);
+        int rows = pt.executeUpdate();
+        pt.close();
+        if (rows != 1) throw new Exception("Supplier not found or inactive.");
+        logSupplierBalanceEntry(con, supplierId, amount, "opening",
+            notes != null && !notes.trim().isEmpty() ? notes.trim() : "Old / opening balance", uid, 0);
+        con.commit();
+    } catch (Exception e) {
+        if (con != null) try { con.rollback(); } catch (SQLException ex) {}
+        throw e;
+    } finally {
+        if (pt != null) try { pt.close(); } catch (SQLException e) {}
+        if (con != null) try { con.close(); } catch (SQLException e) {}
+    }
+}
+
+public Vector getSupplierDetail(int supplierId) throws Exception {
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    Vector row = new Vector();
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        pt = con.prepareStatement(
+            "SELECT id, name, COALESCE(phone_number,''), COALESCE(gstin,''), COALESCE(balance,0), COALESCE(is_gst,0) "
+            + "FROM prod_supplier WHERE id=? AND is_active=1"
+        );
+        pt.setInt(1, supplierId);
+        rs = pt.executeQuery();
+        if (rs.next()) {
+            row.addElement(rs.getString(1));
+            row.addElement(rs.getString(2));
+            row.addElement(rs.getString(3));
+            row.addElement(rs.getString(4));
+            row.addElement(rs.getString(5));
+            row.addElement(rs.getString(6));
+        }
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception e) {}
+        if (pt != null) try { pt.close(); } catch (Exception e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+    return row;
 }
 
 }

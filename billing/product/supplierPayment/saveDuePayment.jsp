@@ -35,5 +35,5 @@ try {
     e.printStackTrace();
 }
 
-response.sendRedirect(request.getContextPath() + "/product/supplierPayment/page.jsp");
+response.sendRedirect(request.getContextPath() + "/product/supplierPayment/page1.jsp?supId=" + supId + "&msg=Payment+collected+successfully&type=success");
 %>

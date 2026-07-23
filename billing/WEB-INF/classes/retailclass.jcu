@@ -45,7 +45,7 @@
 			<path>product\productBean.java</path>
 			<source>true</source>
 			<index>1</index>
-			<active>false</active>
+			<active>true</active>
 		</docitem>
 		<docitem>
 			<path>util\DBConnectionManager.java</path>

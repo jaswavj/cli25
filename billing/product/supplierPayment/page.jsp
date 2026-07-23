@@ -1,63 +1,125 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page language="java" import= "java.util.*"%>
-<%@ page import="java.text.SimpleDateFormat, java.util.Date" %>
-<jsp:useBean id="prod" class="product.productBean" />
+<%@ page language="java" import="java.util.*"%>
+<jsp:useBean id="bill" class="billing.billingBean" />
 <%
+String msg = request.getParameter("msg");
+String type = request.getParameter("type");
 
-String today = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
+double totalBalance = 0;
+int pendingCount = 0;
+Vector supplierList = new Vector();
+try {
+    totalBalance = bill.getTotalSupplierOutstandingBalance();
+    pendingCount = bill.getPendingSupplierCount();
+    supplierList = bill.getSupplierWiseBalanceList();
+} catch (Exception e) {
+    if (msg == null) {
+        msg = "Run database/prod_supplier_balance_setup.sql if balance column is missing.";
+        type = "warning";
+    }
+}
 %>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Billing App</title>
+    <title>Supplier Payment</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Bootstrap CSS -->
-<%@ include file="/assets/common/head.jsp" %>
-    
-
+    <%@ include file="/assets/common/head.jsp" %>
+    <style>
+        .summary-card { border:none; box-shadow:0 2px 8px rgba(0,0,0,.08); border-radius:10px; }
+        .summary-value { font-size:1.6rem; font-weight:800; }
+        .supplier-row { cursor:pointer; }
+        .supplier-row:hover td { background:#f8fafc !important; }
+    </style>
 </head>
 <body>
-    <%@ include file="/assets/navbar/navbar.jsp" %>
+<%@ include file="/assets/navbar/navbar.jsp" %>
 <%
     request.setAttribute("pageTitle",    "Supplier Payment");
-    request.setAttribute("pageSubtitle", "Product — Supplier Payments");
+    request.setAttribute("pageSubtitle", "Credit Collection — Supplier Balances");
     request.setAttribute("pageIcon",     "fa-solid fa-hand-holding-dollar");
 %>
 <jsp:include page="/assets/common/pageHeader.jsp" />
 
-    <div class="container-fluid mt-3 mst-page">
-
-    <form action="<%=contextPath%>/product/supplierPayment/page1.jsp" method="get" class="row g-3">
-        
-        <div class="col-md-3">
-            <label for="fromDate" class="form-label">Supplier:</label>
-            <select name="supId" class="form-select fg-inp">
-                <option value="0">Select Supplier</option>
-                <%
-                    Vector vec		= prod.GetSupplier();
-                    ///////////////Supplier////////
-                    for(int n=0;n< vec.size();n++)
-                        {
-                        Vector sub	 	= (Vector)vec.elementAt(n);
-                        int ID			= Integer.parseInt(sub.elementAt(0).toString());
-                        String name 	= sub.elementAt(1).toString();
-                %>
-                    <option value="<%=ID%>"><%=name%></option>
-                <% } %>
-            </select>
-        </div>
-        
-
-        
-        
-
-        <div class="col-md-4 d-flex align-items-end">
-            <button type="submit" class="bb bb-primary w-100">Get Pending Supplier Payment</button>
-        </div>
-    </form>
+<% if (msg != null) { %>
+<div class="container-fluid mt-2">
+    <div class="alert alert-<%= (type != null ? type : "info") %> alert-dismissible fade show" role="alert">
+        <%= msg %>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
 </div>
-    <!-- Bootstrap JS -->
+<% } %>
 
+<div class="container-fluid mt-2 mst-page">
+    <div class="row g-3 mb-3">
+        <div class="col-md-6">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-bold">Total Supplier Balance</div>
+                    <div class="summary-value text-danger">&#8377; <%= String.format("%,.2f", totalBalance) %></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-bold">Pending Suppliers</div>
+                    <div class="summary-value" style="color:var(--bill-navy)"><%= pendingCount %></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="border:none; box-shadow:0 2px 4px rgba(0,0,0,.07); border-radius:8px;">
+        <div class="mst-card-header-light py-2 px-3">
+            <h6 class="mb-0"><i class="fas fa-truck me-2"></i>Supplier-wise Balance</h6>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 mst-table" style="min-width:900px; width:100%;">
+                <thead>
+                    <tr>
+                        <th style="width:50px;">#</th>
+                        <th>Supplier</th>
+                        <th style="width:140px;">Phone</th>
+                        <th class="text-end" style="width:120px;">Pending Bills</th>
+                        <th class="text-end" style="width:140px;">Bill Balance</th>
+                        <th class="text-end" style="width:140px;">Total Balance</th>
+                        <th class="text-center" style="width:130px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <% if (supplierList.isEmpty()) { %>
+                    <tr><td colspan="7" class="text-center text-muted py-4">No pending supplier balance.</td></tr>
+                <% } else {
+                    for (int i = 0; i < supplierList.size(); i++) {
+                        Vector row = (Vector) supplierList.get(i);
+                        int supId = Integer.parseInt(row.get(0).toString());
+                        String supName = row.get(1).toString();
+                        String phone = row.get(2).toString();
+                        double supBalance = Double.parseDouble(row.get(3).toString());
+                        int pendingBills = Integer.parseInt(row.get(4).toString());
+                        double billBalance = Double.parseDouble(row.get(5).toString());
+                %>
+                    <tr class="supplier-row" onclick="location.href='<%=contextPath%>/product/supplierPayment/page1.jsp?supId=<%=supId%>'">
+                        <td><%= i + 1 %></td>
+                        <td class="fw-bold"><%= supName %></td>
+                        <td><%= phone.isEmpty() ? "-" : phone %></td>
+                        <td class="text-end"><%= pendingBills %></td>
+                        <td class="text-end">&#8377; <%= String.format("%,.2f", billBalance) %></td>
+                        <td class="text-end text-danger fw-bold">&#8377; <%= String.format("%,.2f", supBalance) %></td>
+                        <td class="text-center">
+                            <a href="<%=contextPath%>/product/supplierPayment/page1.jsp?supId=<%=supId%>" class="bb bb-outline btn-sm" onclick="event.stopPropagation()">
+                                View Details
+                            </a>
+                        </td>
+                    </tr>
+                <%  }
+                   } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 </body>
 </html>

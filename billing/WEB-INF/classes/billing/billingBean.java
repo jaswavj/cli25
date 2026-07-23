@@ -2647,6 +2647,79 @@ public Vector getSalesReportByBrand(String from,String to,int brand)throws Excep
 			}
 		}
 }
+
+public double getTotalSupplierOutstandingBalance() throws Exception {
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        pt = con.prepareStatement(
+            "SELECT COALESCE(SUM(balance),0) FROM prod_supplier WHERE is_active=1 AND COALESCE(balance,0) > 0"
+        );
+        rs = pt.executeQuery();
+        if (rs.next()) return rs.getDouble(1);
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception e) {}
+        if (pt != null) try { pt.close(); } catch (Exception e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+    return 0;
+}
+
+public int getPendingSupplierCount() throws Exception {
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        pt = con.prepareStatement(
+            "SELECT COUNT(*) FROM prod_supplier WHERE is_active=1 AND COALESCE(balance,0) > 0"
+        );
+        rs = pt.executeQuery();
+        if (rs.next()) return rs.getInt(1);
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception e) {}
+        if (pt != null) try { pt.close(); } catch (Exception e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+    return 0;
+}
+
+public Vector getSupplierWiseBalanceList() throws Exception {
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    Vector vec = new Vector();
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        pt = con.prepareStatement(
+            "SELECT s.id, s.name, COALESCE(s.phone_number,''), COALESCE(s.balance,0), "
+            + "(SELECT COUNT(*) FROM prod_purchase p WHERE p.deal_id=s.id AND p.is_cancelled=0 AND p.balance>0 AND p.invno!=''), "
+            + "(SELECT COALESCE(SUM(p.balance),0) FROM prod_purchase p WHERE p.deal_id=s.id AND p.is_cancelled=0 AND p.balance>0 AND p.invno!='') "
+            + "FROM prod_supplier s "
+            + "WHERE s.is_active=1 AND COALESCE(s.balance,0) > 0 "
+            + "ORDER BY s.balance DESC, s.name"
+        );
+        rs = pt.executeQuery();
+        while (rs.next()) {
+            Vector row = new Vector();
+            row.addElement(rs.getString(1));
+            row.addElement(rs.getString(2));
+            row.addElement(rs.getString(3));
+            row.addElement(rs.getString(4));
+            row.addElement(rs.getString(5));
+            row.addElement(rs.getString(6));
+            vec.addElement(row);
+        }
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception e) {}
+        if (pt != null) try { pt.close(); } catch (Exception e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+    return vec;
+}
+
 public Vector getDueSupplierBills(int supId) throws Exception {
     Connection con = null;
     PreparedStatement pt = null;
@@ -2829,8 +2902,33 @@ public void saveSupplierDuePayment(int billId, double payNow, int mode, int bank
         pt.setInt(7, uid);               // user id
         pt.setString(8, "pending payment"); // notes
         pt.executeUpdate();
+        pt.close();
 
-        con.commit(); // commit all 3 steps
+        // 4. Reduce supplier master balance
+        pt = con.prepareStatement(
+            "UPDATE prod_supplier SET balance = COALESCE(balance,0) - ? WHERE id = ?"
+        );
+        pt.setDouble(1, payNow);
+        pt.setInt(2, supId);
+        pt.executeUpdate();
+        pt.close();
+
+        try {
+            pt = con.prepareStatement(
+                "INSERT INTO prod_supplier_balance_log (supplier_id, amount, type, notes, uid, reference_id, entry_date, entry_time) "
+                + "VALUES (?, ?, 'payment', ?, ?, ?, CURDATE(), CURTIME())"
+            );
+            pt.setInt(1, supId);
+            pt.setDouble(2, payNow);
+            pt.setString(3, "Supplier payment collected");
+            pt.setInt(4, uid);
+            pt.setInt(5, billId);
+            pt.executeUpdate();
+        } catch (SQLException logEx) {
+            // log table may not exist yet
+        }
+
+        con.commit(); // commit all steps
     } catch (Exception e) {
         if (con != null) {
             try { con.rollback(); } catch (SQLException ex) { }
@@ -2839,6 +2937,157 @@ public void saveSupplierDuePayment(int billId, double payNow, int mode, int bank
     } finally {
         if (rs != null) try { rs.close(); } catch (SQLException e) {}
         if (pt != null) try { pt.close(); } catch (SQLException e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+}
+
+public Vector getSupplierBalanceLedger(int supId) throws Exception {
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    Vector vec = new Vector();
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        pt = con.prepareStatement(
+            "SELECT l.entry_date, l.entry_time, l.type, l.amount, COALESCE(l.notes,''), "
+            + "COALESCE(u.user_name,''), COALESCE(l.reference_id,0) "
+            + "FROM prod_supplier_balance_log l "
+            + "LEFT JOIN users u ON u.id = l.uid "
+            + "WHERE l.supplier_id = ? "
+            + "ORDER BY l.entry_date DESC, l.entry_time DESC, l.id DESC"
+        );
+        pt.setInt(1, supId);
+        rs = pt.executeQuery();
+        while (rs.next()) {
+            Vector row = new Vector();
+            row.addElement(rs.getString(1));
+            row.addElement(rs.getString(2));
+            row.addElement(rs.getString(3));
+            row.addElement(rs.getString(4));
+            row.addElement(rs.getString(5));
+            row.addElement(rs.getString(6));
+            row.addElement(rs.getString(7));
+            vec.addElement(row);
+        }
+    } catch (SQLException e) {
+        if (e.getMessage() == null || !e.getMessage().toLowerCase().contains("prod_supplier_balance_log")) {
+            throw e;
+        }
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception e) {}
+        if (pt != null) try { pt.close(); } catch (Exception e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+    return vec;
+}
+
+public void saveSupplierTotalBalancePayment(int supId, double payAmount, int mode, int bankOption, int uid) throws Exception {
+    if (supId <= 0) throw new Exception("Supplier is required.");
+    if (payAmount <= 0) throw new Exception("Payment amount must be greater than zero.");
+
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        con.setAutoCommit(false);
+
+        double supplierBalance = 0;
+        pt = con.prepareStatement("SELECT COALESCE(balance,0) FROM prod_supplier WHERE id=? AND is_active=1 FOR UPDATE");
+        pt.setInt(1, supId);
+        rs = pt.executeQuery();
+        if (!rs.next()) throw new Exception("Supplier not found.");
+        supplierBalance = rs.getDouble(1);
+        rs.close();
+        pt.close();
+
+        if (payAmount > supplierBalance + 0.001) {
+            throw new Exception("Amount cannot exceed total balance of " + String.format("%.2f", supplierBalance));
+        }
+
+        double remaining = payAmount;
+        pt = con.prepareStatement(
+            "SELECT a.id, a.balance, sp.id AS supPayId "
+            + "FROM prod_purchase a "
+            + "JOIN prod_purchase_supplier_payment sp ON sp.prid = a.id "
+            + "WHERE a.deal_id=? AND a.is_cancelled=0 AND a.balance>0 AND a.invno!='' "
+            + "ORDER BY a.ent_date ASC, a.id ASC"
+        );
+        pt.setInt(1, supId);
+        rs = pt.executeQuery();
+
+        while (rs.next() && remaining > 0.001) {
+            int billId = rs.getInt("id");
+            double billBalance = rs.getDouble("balance");
+            int supPayID = rs.getInt("supPayId");
+            double apply = Math.min(remaining, billBalance);
+
+            PreparedStatement upt = con.prepareStatement(
+                "UPDATE prod_purchase SET paid = paid + ?, balance = balance - ? WHERE id = ?"
+            );
+            upt.setDouble(1, apply);
+            upt.setDouble(2, apply);
+            upt.setInt(3, billId);
+            upt.executeUpdate();
+            upt.close();
+
+            upt = con.prepareStatement(
+                "UPDATE prod_purchase_supplier_payment SET paid = paid + ?, balance = balance - ? WHERE id = ?"
+            );
+            upt.setDouble(1, apply);
+            upt.setDouble(2, apply);
+            upt.setInt(3, supPayID);
+            upt.executeUpdate();
+            upt.close();
+
+            upt = con.prepareStatement(
+                "INSERT INTO prod_purchase_supplier_payment_details "
+                + "(supPayId, payable, paid, balance, pay_type, pay_mode, uid, notes, date, time) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())"
+            );
+            upt.setInt(1, supPayID);
+            upt.setDouble(2, billBalance);
+            upt.setDouble(3, apply);
+            upt.setDouble(4, billBalance - apply);
+            upt.setInt(5, mode);
+            upt.setInt(6, bankOption);
+            upt.setInt(7, uid);
+            upt.setString(8, "Supplier balance collection");
+            upt.executeUpdate();
+            upt.close();
+
+            remaining -= apply;
+        }
+        rs.close();
+        pt.close();
+
+        pt = con.prepareStatement("UPDATE prod_supplier SET balance = COALESCE(balance,0) - ? WHERE id = ?");
+        pt.setDouble(1, payAmount);
+        pt.setInt(2, supId);
+        pt.executeUpdate();
+        pt.close();
+
+        try {
+            pt = con.prepareStatement(
+                "INSERT INTO prod_supplier_balance_log (supplier_id, amount, type, notes, uid, reference_id, entry_date, entry_time) "
+                + "VALUES (?, ?, 'payment', ?, ?, NULL, CURDATE(), CURTIME())"
+            );
+            pt.setInt(1, supId);
+            pt.setDouble(2, payAmount);
+            pt.setString(3, "Balance collection");
+            pt.setInt(4, uid);
+            pt.executeUpdate();
+        } catch (SQLException logEx) {
+            // log table may not exist
+        }
+
+        con.commit();
+    } catch (Exception e) {
+        if (con != null) try { con.rollback(); } catch (SQLException ex) {}
+        throw e;
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception e) {}
+        if (pt != null) try { pt.close(); } catch (Exception e) {}
         if (con != null) try { con.close(); } catch (Exception e) {}
     }
 }
