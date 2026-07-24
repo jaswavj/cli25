@@ -2662,6 +2662,41 @@ public Vector searchSuppliers(String query) throws Exception {
     }
 }
 /////////////////////////////////////////////////
+public Vector searchSuppliersByPhone(String phone) throws Exception {
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        Vector major = new Vector();
+        pt = con.prepareStatement(
+            "SELECT id, name, "
+            + "CASE WHEN phone_number = '' OR phone_number IS NULL THEN '-' ELSE phone_number END AS phone_number, "
+            + "CASE WHEN DESCRIPTION = '' OR DESCRIPTION IS NULL THEN '-' ELSE DESCRIPTION END AS address, "
+            + "CASE WHEN gstin = '' OR gstin IS NULL THEN '-' ELSE gstin END AS gstin "
+            + "FROM prod_supplier "
+            + "WHERE is_active = 1 AND phone_number LIKE ? "
+            + "ORDER BY name LIMIT 10"
+        );
+        pt.setString(1, "%" + phone + "%");
+        rs = pt.executeQuery();
+        while (rs.next()) {
+            Vector vec = new Vector();
+            vec.addElement(rs.getInt(1));
+            vec.addElement(rs.getString(2));
+            vec.addElement(rs.getString(3));
+            vec.addElement(rs.getString(4));
+            vec.addElement(rs.getString(5));
+            major.addElement(vec);
+        }
+        return major;
+    } finally {
+        if (rs != null) try { rs.close(); } catch (SQLException e) { }
+        if (pt != null) try { pt.close(); } catch (SQLException e) { }
+        if (con != null) try { con.close(); } catch (Exception e) { }
+    }
+}
+/////////////////////////////////////////////////
 public String getCustomerNameById(int customerId) throws Exception {
     Connection con = null;
     PreparedStatement pt = null;

@@ -2804,20 +2804,27 @@ public int getPendingSupplierCount() throws Exception {
 }
 
 public Vector getSupplierWiseBalanceList() throws Exception {
+    return getAllSupplierWiseBalanceList(true);
+}
+
+public Vector getAllSupplierWiseBalanceList(boolean dueOnly) throws Exception {
     Connection con = null;
     PreparedStatement pt = null;
     ResultSet rs = null;
     Vector vec = new Vector();
     try {
         con = util.DBConnectionManager.getConnectionFromPool();
-        pt = con.prepareStatement(
+        String sql =
             "SELECT s.id, s.name, COALESCE(s.phone_number,''), COALESCE(s.balance,0), "
             + "(SELECT COUNT(*) FROM prod_purchase p WHERE p.deal_id=s.id AND p.is_cancelled=0 AND p.balance>0 AND p.invno!=''), "
             + "(SELECT COALESCE(SUM(p.balance),0) FROM prod_purchase p WHERE p.deal_id=s.id AND p.is_cancelled=0 AND p.balance>0 AND p.invno!='') "
             + "FROM prod_supplier s "
-            + "WHERE s.is_active=1 AND COALESCE(s.balance,0) > 0 "
-            + "ORDER BY s.balance DESC, s.name"
-        );
+            + "WHERE s.is_active=1 ";
+        if (dueOnly) {
+            sql += "AND COALESCE(s.balance,0) > 0 ";
+        }
+        sql += "ORDER BY COALESCE(s.balance,0) DESC, s.name";
+        pt = con.prepareStatement(sql);
         rs = pt.executeQuery();
         while (rs.next()) {
             Vector row = new Vector();
