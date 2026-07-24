@@ -29,6 +29,10 @@ if (account != null && account.size() >= 4) {
 
 // Due payment collections
 Vector duePayments = bill.getCustomerDuePayments(customerId);
+Vector openingDueList = new Vector();
+try {
+    openingDueList = bill.getCustomerOpeningDueList(customerId);
+} catch (Exception _odEx) {}
 
 // Total pending from bills
 double totalPending = 0;
@@ -86,6 +90,26 @@ if (duePayments != null) {
         timeline.add(e);
     }
 }
+if (openingDueList != null) {
+    for (int i = 0; i < openingDueList.size(); i++) {
+        Vector or = (Vector) openingDueList.get(i);
+        Vector e = new Vector();
+        e.addElement("OPENING");
+        e.addElement("");
+        e.addElement(or.get(2).toString());       // amount
+        e.addElement("");                         // paid
+        e.addElement(or.get(3).toString());       // balance after
+        e.addElement(or.get(4).toString());       // notes
+        e.addElement("");
+        e.addElement("");
+        e.addElement(or.get(1).toString());       // due date
+        e.addElement(or.get(7).toString());       // entry time
+        e.addElement(or.get(5).toString());       // user
+        e.addElement("-1");
+        e.addElement("0");
+        timeline.add(e);
+    }
+}
 java.util.Collections.sort(timeline, new java.util.Comparator() {
     public int compare(Object a, Object b) {
         Vector va = (Vector) a; Vector vb = (Vector) b;
@@ -129,9 +153,19 @@ java.util.Collections.sort(timeline, new java.util.Comparator() {
 <jsp:include page="/assets/common/pageHeader.jsp" />
 
 <div class="container-fluid px-3 pt-2 mst-page" style="max-width:100%;">
-  <a href="<%=contextPath%>/billing/customer/index.jsp" class="bb bb-outline" style="font-size:12px;height:30px;padding:0 12px;display:inline-flex;align-items:center;gap:6px;">
-    <i class="fa-solid fa-arrow-left"></i> Back
-  </a>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    <a href="<%=contextPath%>/billing/customer/index.jsp" class="bb bb-outline" style="font-size:12px;height:30px;padding:0 12px;display:inline-flex;align-items:center;gap:6px;">
+      <i class="fa-solid fa-arrow-left"></i> Back
+    </a>
+    <button type="button" class="bb bb-outline" data-bs-toggle="modal" data-bs-target="#openingDueModal" style="font-size:12px;height:30px;padding:0 12px;">
+      <i class="fa-solid fa-file-invoice-dollar me-1"></i> Set Opening Due
+    </button>
+    <% if (Math.max(0, accBalance - accAdvance) > 0) { %>
+    <button type="button" class="bb bb-primary" onclick="scrollToCollect()" style="font-size:12px;height:30px;padding:0 12px;">
+      <i class="fa-solid fa-hand-holding-dollar me-1"></i> Collect Payment
+    </button>
+    <% } %>
+  </div>
 </div>
 
 <div class="container-fluid mt-2 mst-page">
@@ -190,6 +224,7 @@ java.util.Collections.sort(timeline, new java.util.Comparator() {
                 for (int i = 0; i < timeline.size(); i++) {
                   Vector te      = (Vector) timeline.get(i);
                   boolean isBill = "BILL".equals(te.get(0).toString());
+                  boolean isOpening = "OPENING".equals(te.get(0).toString());
                   String teBillNo= te.get(1).toString();
                   String teCol1  = te.get(2).toString();
                   String teCol2  = te.get(3).toString();
@@ -204,8 +239,8 @@ java.util.Collections.sort(timeline, new java.util.Comparator() {
                   double tePendD = 0; try { tePendD = Double.parseDouble(te.get(12).toString()); } catch(Exception ex){}
                   double teCol3D = 0; try { teCol3D = Double.parseDouble(teCol3.isEmpty() ? "0" : teCol3); } catch(Exception ex){}
                   boolean hasPend = isBill && tePendD > 0;
-                  String rowBg   = !isBill ? "background:#f0fdf4;" : (hasPend ? "background:#fff1f1;" : "");
-                  String tdBg    = !isBill ? "background:#ecfdf5 !important;" : (hasPend ? "background:#fff1f1 !important;" : "");
+                  String rowBg   = isOpening ? "background:#fffbeb;" : (!isBill ? "background:#f0fdf4;" : (hasPend ? "background:#fff1f1;" : ""));
+                  String tdBg    = isOpening ? "background:#fef3c7 !important;" : (!isBill ? "background:#ecfdf5 !important;" : (hasPend ? "background:#fff1f1 !important;" : ""));
               %>
               <tr <%=isBill ? "class=\"bill-row-link\" data-bill-id=\""+teBillId+"\" onclick=\"selectBill(this,"+teBillId+")\"" : ""%>
                   style="<%=rowBg%>">
@@ -213,12 +248,15 @@ java.util.Collections.sort(timeline, new java.util.Comparator() {
                 <td style="<%=tdBg%>">
                   <% if (isBill) { %>
                   <span class="badge" style="font-size:10px;font-weight:700;background:<%=hasPend ? "#fee2e2;color:#b91c1c" : "#dbeafe;color:#1d4ed8"%>;">BILL</span>
+                  <% } else if (isOpening) { %>
+                  <span class="badge" style="font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;">OPENING DUE</span>
                   <% } else { %>
                   <span class="badge" style="font-size:10px;font-weight:700;background:#dcfce7;color:#15803d;">COLLECTION</span>
                   <% } %>
                 </td>
                 <td style="<%=tdBg%>">
                   <% if (isBill) { %><span style="font-weight:600;"><%=teBillNo%></span>
+                  <% } else if (isOpening) { %><span style="font-size:11px;color:#92400e;"><%=te.get(5).toString().isEmpty() ? "Opening Due" : te.get(5).toString()%></span>
                   <% } else { %><span style="opacity:.35;">—</span><% } %>
                 </td>
                 <td class="text-end" style="<%=tdBg%>"><%=teCol1.isEmpty() ? "<span style='opacity:.3'>—</span>" : teCol1%></td>
@@ -252,11 +290,34 @@ java.util.Collections.sort(timeline, new java.util.Comparator() {
       </div>
 
       <!-- Payment Box -->
-      <div class="mst-card">
+      <div class="mst-card" id="collectPanel">
         <div class="mst-card-header px-3 py-2">
           <span style="font-weight:700;font-size:13px;"><i class="fa-solid fa-circle-dollar-to-slot me-2"></i>Collect Payment</span>
         </div>
         <div class="p-3">
+          <div class="mb-3" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;opacity:.7;margin-bottom:8px;">Account Summary</div>
+            <div class="row g-2 text-center">
+              <div class="col-4">
+                <div style="font-size:10px;opacity:.7;">Balance</div>
+                <div style="font-size:16px;font-weight:800;color:<%=accBalance > 0 ? "#dc2626" : "#16a34a"%>;">&#8377;<%= String.format("%,.2f", accBalance)%></div>
+              </div>
+              <div class="col-4">
+                <div style="font-size:10px;opacity:.7;">Advance</div>
+                <div style="font-size:16px;font-weight:800;color:#16a34a;">&#8377;<%= String.format("%,.2f", accAdvance)%></div>
+              </div>
+              <div class="col-4">
+                <div style="font-size:10px;opacity:.7;">Collectable</div>
+                <div style="font-size:16px;font-weight:800;color:#0369a1;">&#8377;<%= String.format("%,.2f", Math.max(0, accBalance - accAdvance))%></div>
+              </div>
+            </div>
+          </div>
+
+          <% if (Math.max(0, accBalance - accAdvance) <= 0) { %>
+          <div class="alert alert-success py-2 mb-0" style="font-size:12px;">
+            <i class="fa-solid fa-circle-check me-1"></i>No outstanding balance to collect.
+          </div>
+          <% } else { %>
           <div class="mb-2">
             <label class="pay-label">Amount to Collect</label>
             <input type="number" id="collectAmount" class="pay-inp" placeholder="0.00" min="0" step="0.01"
@@ -305,9 +366,47 @@ java.util.Collections.sort(timeline, new java.util.Comparator() {
             <i class="fa-solid fa-check me-1"></i> Submit Payment
           </button>
           <div id="payError" style="display:none;color:#dc2626;font-size:12px;margin-top:6px;text-align:center;"></div>
+          <% } %>
         </div>
       </div>
 
+    </div>
+  </div>
+</div>
+
+<!-- Opening Due Modal -->
+<div class="modal fade" id="openingDueModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header mst-card-header">
+        <h5 class="modal-title"><i class="fa-solid fa-file-invoice-dollar me-2"></i>Set Opening Due</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="pay-label">Due Date</label>
+          <input type="date" id="odDate" class="pay-inp">
+        </div>
+        <div class="mb-3">
+          <label class="pay-label">Opening Due Amount</label>
+          <input type="number" id="odAmount" class="pay-inp" step="0.01" min="0.01" placeholder="0.00">
+        </div>
+        <div class="mb-3">
+          <label class="pay-label">Notes <span class="text-muted fw-normal">(optional)</span></label>
+          <input type="text" id="odNotes" class="pay-inp" placeholder="Previous balance / opening due">
+        </div>
+        <div class="alert alert-info py-2 mb-0" style="font-size:12px;">
+          Current balance: <strong>&#8377;<%= String.format("%,.2f", accBalance)%></strong>.
+          The amount entered will be <strong>added</strong> to this balance.
+        </div>
+        <div id="odError" class="text-danger mt-2" style="display:none;font-size:12px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="bb bb-outline" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="bb bb-primary" onclick="saveOpeningDue()" id="odSaveBtn">
+          <i class="fa-solid fa-floppy-disk me-1"></i> Save Opening Due
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -333,6 +432,7 @@ const contextPath = '<%=contextPath%>';
 const customerId  = <%=customerId%>;
 const accBalance  = <%=accBalance%>;
 const accAdvance  = <%=accAdvance%>;
+const netPayable  = Math.max(0, accBalance - accAdvance);
 
 // ── Bill row selection ──────────────────────────────────────
 function selectBill(row, billId) {
@@ -353,8 +453,6 @@ function selectBill(row, billId) {
 }
 
 // ── Payment logic (mirrors billing.jsp) ────────────────────
-const netPayable = Math.max(0, accBalance - accAdvance);
-
 function onModeChange() {
     const mode = document.getElementById('payMode').value;
     const total = parseFloat(document.getElementById('collectAmount').value) || 0;
@@ -410,6 +508,7 @@ function calcRemaining() {
 }
 
 function submitPayment() {
+    if (netPayable <= 0) return;
     const errBox = document.getElementById('payError');
     errBox.style.display = 'none';
 
@@ -484,7 +583,86 @@ function submitPayment() {
 }
 
 // Init
-onModeChange();
+const today = new Date().toISOString().slice(0, 10);
+const odDateInput = document.getElementById('odDate');
+if (odDateInput) odDateInput.value = today;
+
+function scrollToCollect() {
+    const panel = document.getElementById('collectPanel');
+    if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const amountInput = document.getElementById('collectAmount');
+    if (amountInput) amountInput.focus();
+}
+
+function saveOpeningDue() {
+    const errBox = document.getElementById('odError');
+    errBox.style.display = 'none';
+
+    const dueDate = document.getElementById('odDate').value;
+    const amount = parseFloat(document.getElementById('odAmount').value) || 0;
+    const notes = document.getElementById('odNotes').value;
+
+    if (!dueDate) {
+        errBox.textContent = 'Please select a date.';
+        errBox.style.display = 'block';
+        return;
+    }
+    if (amount <= 0) {
+        errBox.textContent = 'Please enter an amount greater than zero.';
+        errBox.style.display = 'block';
+        return;
+    }
+
+    const btn = document.getElementById('odSaveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Saving…';
+
+    const params = new URLSearchParams({
+        customerId: customerId,
+        dueDate: dueDate,
+        amount: amount.toFixed(2),
+        notes: notes
+    });
+
+    fetch(contextPath + '/billing/customer/saveOpeningDue.jsp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString()
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Opening Due Saved',
+                text: 'New account balance: ₹' + parseFloat(data.newBalance).toFixed(2),
+                confirmButtonText: 'OK'
+            }).then(() => location.reload());
+        } else {
+            errBox.textContent = data.message || 'Error saving opening due.';
+            errBox.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i> Save Opening Due';
+        }
+    })
+    .catch(() => {
+        errBox.textContent = 'Network error. Please try again.';
+        errBox.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i> Save Opening Due';
+    });
+}
+
+if (netPayable > 0) {
+    onModeChange();
+}
+if (new URLSearchParams(window.location.search).get('collect') === '1') {
+    scrollToCollect();
+}
+if (new URLSearchParams(window.location.search).get('openingDue') === '1') {
+    const modal = new bootstrap.Modal(document.getElementById('openingDueModal'));
+    modal.show();
+}
 </script>
 </body>
 </html>

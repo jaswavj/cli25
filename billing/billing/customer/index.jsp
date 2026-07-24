@@ -79,14 +79,38 @@ try {
 
             <div id="selectedCustomerBox" style="display:none;margin-top:18px;
                 border:1.5px solid #22c55e;border-radius:8px;padding:14px 16px;background:#f0fdf4;">
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <div>
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:180px;">
                         <div style="font-weight:700;font-size:15px;" id="selName"></div>
                         <div style="font-size:13px;color:#555;margin-top:2px;" id="selPhone"></div>
+                        <div id="selAccountInfo" style="display:none;margin-top:12px;">
+                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+                                <div style="background:#fff;border:1px solid #bbf7d0;border-radius:6px;padding:8px;text-align:center;">
+                                    <div style="font-size:10px;font-weight:700;text-transform:uppercase;opacity:.7;">Account Balance</div>
+                                    <div style="font-size:16px;font-weight:800;color:#dc2626;" id="selBalance">0.00</div>
+                                </div>
+                                <div style="background:#fff;border:1px solid #bbf7d0;border-radius:6px;padding:8px;text-align:center;">
+                                    <div style="font-size:10px;font-weight:700;text-transform:uppercase;opacity:.7;">Advance</div>
+                                    <div style="font-size:16px;font-weight:800;color:#16a34a;" id="selAdvance">0.00</div>
+                                </div>
+                                <div style="background:#fff;border:1px solid #bbf7d0;border-radius:6px;padding:8px;text-align:center;">
+                                    <div style="font-size:10px;font-weight:700;text-transform:uppercase;opacity:.7;">Collectable</div>
+                                    <div style="font-size:16px;font-weight:800;color:#0369a1;" id="selCollectable">0.00</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <button class="btn btn-sm btn-success" onclick="goToView()">
-                        View Account <i class="fa-solid fa-arrow-right ms-1"></i>
-                    </button>
+                    <div style="display:flex;flex-direction:column;gap:8px;min-width:140px;">
+                        <button class="btn btn-sm btn-outline-success w-100" onclick="goToView()">
+                            View Account <i class="fa-solid fa-arrow-right ms-1"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning w-100" onclick="goToOpeningDue()">
+                            Set Opening Due <i class="fa-solid fa-file-invoice-dollar ms-1"></i>
+                        </button>
+                        <button class="btn btn-sm btn-success w-100" id="collectBtn" onclick="goToCollect()" disabled>
+                            Collect Payment <i class="fa-solid fa-hand-holding-dollar ms-1"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
     </div>
@@ -149,11 +173,42 @@ function selectCustomer(c) {
     document.getElementById('selName').textContent  = c.name;
     document.getElementById('selPhone').textContent = c.phone && c.phone !== '-' ? c.phone : '';
     document.getElementById('selectedCustomerBox').style.display = 'block';
+    document.getElementById('selAccountInfo').style.display = 'none';
+    document.getElementById('collectBtn').disabled = true;
+    loadCustomerAccount(c.id);
+}
+
+function loadCustomerAccount(customerId) {
+    fetch(contextPath + '/billing/customer/getCustomerAccount.jsp?customerId=' + customerId)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) return;
+            document.getElementById('selAccountInfo').style.display = 'block';
+            document.getElementById('selBalance').textContent = formatMoney(data.balance);
+            document.getElementById('selAdvance').textContent = formatMoney(data.advance);
+            document.getElementById('selCollectable').textContent = formatMoney(data.netCollectable);
+            document.getElementById('collectBtn').disabled = !(data.netCollectable > 0);
+        })
+        .catch(() => {});
+}
+
+function formatMoney(value) {
+    return '₹' + parseFloat(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function goToView() {
     if (!selectedCustomerId) return;
     window.location.href = contextPath + '/billing/customer/view.jsp?customerId=' + selectedCustomerId;
+}
+
+function goToCollect() {
+    if (!selectedCustomerId) return;
+    window.location.href = contextPath + '/billing/customer/view.jsp?customerId=' + selectedCustomerId + '&collect=1';
+}
+
+function goToOpeningDue() {
+    if (!selectedCustomerId) return;
+    window.location.href = contextPath + '/billing/customer/view.jsp?customerId=' + selectedCustomerId + '&openingDue=1';
 }
 
 // Close dropdown on outside click

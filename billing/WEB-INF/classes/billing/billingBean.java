@@ -1459,6 +1459,123 @@ public double saveCustomerPayment(int customerId,
     }
 }
 
+// Adds opening due to customer account and logs the entry
+public double saveCustomerOpeningDue(int customerId, String dueDate, double amount, String notes, int uid) throws Exception {
+    if (amount <= 0) {
+        throw new Exception("Opening due amount must be greater than zero.");
+    }
+    Connection con = null;
+    PreparedStatement selPS = null;
+    PreparedStatement insAccPS = null;
+    PreparedStatement insDuePS = null;
+    PreparedStatement updPS = null;
+    ResultSet rs = null;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        con.setAutoCommit(false);
+
+        selPS = con.prepareStatement(
+            "SELECT balance FROM customer_account WHERE customer_id = ? FOR UPDATE"
+        );
+        selPS.setInt(1, customerId);
+        rs = selPS.executeQuery();
+        double currentBalance = 0;
+        if (rs.next()) {
+            currentBalance = rs.getDouble(1);
+        } else {
+            rs.close();
+            selPS.close();
+            insAccPS = con.prepareStatement(
+                "INSERT INTO customer_account (customer_id, advance, balance) VALUES (?, 0.00, 0.00)"
+            );
+            insAccPS.setInt(1, customerId);
+            insAccPS.executeUpdate();
+            insAccPS.close();
+        }
+        if (rs != null) {
+            try { rs.close(); } catch (Exception ignore) {}
+        }
+        if (selPS != null) {
+            try { selPS.close(); } catch (Exception ignore) {}
+        }
+
+        double newBalance = currentBalance + amount;
+
+        insDuePS = con.prepareStatement(
+            "INSERT INTO customer_opening_due "
+            + "(customer_id, due_date, amount, balance_after, notes, uid, entry_date, entry_time, is_active) "
+            + "VALUES (?, ?, ?, ?, ?, ?, CURRENT_DATE(), CURRENT_TIME(), 1)"
+        );
+        insDuePS.setInt(1, customerId);
+        insDuePS.setString(2, dueDate);
+        insDuePS.setDouble(3, amount);
+        insDuePS.setDouble(4, newBalance);
+        insDuePS.setString(5, notes != null && notes.trim().length() > 0 ? notes.trim() : null);
+        insDuePS.setInt(6, uid);
+        insDuePS.executeUpdate();
+        insDuePS.close();
+
+        updPS = con.prepareStatement(
+            "UPDATE customer_account SET balance = ? WHERE customer_id = ?"
+        );
+        updPS.setDouble(1, newBalance);
+        updPS.setInt(2, customerId);
+        updPS.executeUpdate();
+        updPS.close();
+
+        con.commit();
+        return newBalance;
+    } catch (Exception e) {
+        if (con != null) try { con.rollback(); } catch (Exception ignore) {}
+        throw e;
+    } finally {
+        if (rs != null) try { rs.close(); } catch (Exception ignore) {}
+        if (selPS != null) try { selPS.close(); } catch (Exception ignore) {}
+        if (insAccPS != null) try { insAccPS.close(); } catch (Exception ignore) {}
+        if (insDuePS != null) try { insDuePS.close(); } catch (Exception ignore) {}
+        if (updPS != null) try { updPS.close(); } catch (Exception ignore) {}
+        if (con != null) try { con.close(); } catch (Exception ignore) {}
+    }
+}
+
+// Returns [id, due_date, amount, balance_after, notes, user_name, entry_date, entry_time]
+public Vector getCustomerOpeningDueList(int customerId) throws Exception {
+    Connection con = null;
+    PreparedStatement pt = null;
+    ResultSet rs = null;
+    try {
+        con = util.DBConnectionManager.getConnectionFromPool();
+        Vector vec = new Vector();
+        pt = con.prepareStatement(
+            "SELECT od.id, od.due_date, od.amount, od.balance_after, COALESCE(od.notes,''), "
+            + "COALESCE(u.user_name,''), od.entry_date, od.entry_time "
+            + "FROM customer_opening_due od "
+            + "LEFT JOIN users u ON u.id = od.uid "
+            + "WHERE od.is_active = 1 AND od.customer_id = ? "
+            + "ORDER BY od.due_date DESC, od.id DESC"
+        );
+        pt.setInt(1, customerId);
+        rs = pt.executeQuery();
+        while (rs.next()) {
+            Vector row = new Vector();
+            row.addElement(rs.getString(1));
+            row.addElement(rs.getString(2));
+            row.addElement(rs.getString(3));
+            row.addElement(rs.getString(4));
+            row.addElement(rs.getString(5));
+            row.addElement(rs.getString(6));
+            row.addElement(rs.getString(7));
+            row.addElement(rs.getString(8));
+            vec.addElement(row);
+        }
+        return vec;
+    } finally {
+        if (rs != null) try { rs.close(); } catch (SQLException e) {}
+        if (pt != null) try { pt.close(); } catch (SQLException e) {}
+        if (con != null) try { con.close(); } catch (Exception e) {}
+    }
+}
+
 // Returns customers with due balance > 0: [customer_id, name, phone, balance]
 public Vector getCustomersDueList() throws Exception {
     Connection con = null;
